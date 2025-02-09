@@ -16,6 +16,11 @@ const HomeScreen = ({ navigation }) => {
         onPress={() => navigation.navigate('Prompted')}>
         <Text style={styles.buttonText}>prompted</Text>
       </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() => navigation.navigate('Test')}>
+        <Text style={styles.buttonText}>test</Text>
+      </TouchableOpacity>
     </View>
   );
 };

@@ -40,6 +40,13 @@
         {
           "microphonePermission": "Allow nasomEATR to access your microphone."
         }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow nasomEATR to access your media library.",
+          "savePhotosPermission": "Allow nasomEATR to save media to your library."
+        }
       ]
     ]
   }

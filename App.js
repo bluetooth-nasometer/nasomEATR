@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import HomeScreen from './components/HomeScreen';
 import LiveScreen from './components/LiveScreen';
 import PromptedScreen from './components/PromptedScreen';
+import TestScreen from './components/TestScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -24,6 +25,11 @@ export default function App() {
         <Stack.Screen 
           name="Prompted" 
           component={PromptedScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="Test" 
+          component={TestScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

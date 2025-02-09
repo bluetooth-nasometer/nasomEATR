@@ -1,19 +1,20 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import Colors from '../constants/Colors';
 
 const HomeScreen = ({ navigation }) => {
-  const handleNavigation = () => {
-    navigation.navigate('Main');
-  };
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>nasomEATR</Text>
       <TouchableOpacity
         style={styles.button}
-        onPress={handleNavigation}>
-        <Text style={styles.buttonText}>lets go</Text>
+        onPress={() => navigation.navigate('Live')}>
+        <Text style={styles.buttonText}>live</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() => navigation.navigate('Prompted')}>
+        <Text style={styles.buttonText}>prompted</Text>
       </TouchableOpacity>
     </View>
   );
@@ -29,13 +30,15 @@ const styles = StyleSheet.create({
   title: {
     fontWeight: 'bold',
     fontSize: 24,
-    marginBottom: 20,
+    marginBottom: 40,
   },
   button: {
     backgroundColor: Colors.lightNavalBlue,
-    paddingHorizontal: 30,
+    width: Dimensions.get('window').width * 0.6,
     paddingVertical: 15,
     borderRadius: 25,
+    alignItems: 'center',
+    marginBottom: 20,
   },
   buttonText: {
     color: Colors.white,

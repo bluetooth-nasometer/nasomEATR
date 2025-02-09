@@ -2,7 +2,8 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import HomeScreen from './components/HomeScreen';
-import MainScreen from './components/MainScreen';
+import LiveScreen from './components/LiveScreen';
+import PromptedScreen from './components/PromptedScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -16,8 +17,13 @@ export default function App() {
           options={{ headerShown: false }}
         />
         <Stack.Screen 
-          name="Main" 
-          component={MainScreen}
+          name="Live" 
+          component={LiveScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="Prompted" 
+          component={PromptedScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

@@ -16,7 +16,7 @@ const ProfileScreen = ({ navigation }) => {
     name: "Dr. ___",
     email: "___@___.___",
     role: "Speech Pathologist",
-    organization: "___",
+    organization: "CHOC",
     avatarUrl: null // Add default avatar image path here
   };
 

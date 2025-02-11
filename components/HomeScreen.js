@@ -45,7 +45,10 @@ const HomeScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Patient List</Text>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Patient List</Text>
+      </View>
+      
       <ScrollView style={styles.patientList}>
         {dummyPatients.map((patient) => (
           <TouchableOpacity 
@@ -84,13 +87,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
-    paddingTop: 60,
   },
   header: {
+    backgroundColor: Colors.lightNavalBlue,
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+  },
+  headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.lightNavalBlue,
-    padding: 20,
+    color: Colors.white,
   },
   patientList: {
     flex: 1,

@@ -23,7 +23,7 @@ function MainTabs() {
           if (route.name === 'HomeTab') {
             iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'Sessions') {
-            iconName = focused ? 'document-text' : 'document-text-outline';
+            iconName = focused ? 'mic' : 'mic-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
           }

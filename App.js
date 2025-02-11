@@ -8,6 +8,7 @@ import SignupScreen from './components/SignupScreen';
 import HomeScreen from './components/HomeScreen';
 import SessionsScreen from './components/SessionsScreen';
 import ProfileScreen from './components/ProfileScreen';
+import AddPatientScreen from './components/AddPatientScreen';
 import Colors from './constants/Colors';
 
 const Stack = createNativeStackNavigator();
@@ -53,6 +54,7 @@ export default function App() {
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Signup" component={SignupScreen} />
         <Stack.Screen name="MainApp" component={MainTabs} />
+        <Stack.Screen name="AddPatient" component={AddPatientScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

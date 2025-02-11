@@ -31,11 +31,8 @@ const dummyPatients = [
 ];
 
 const HomeScreen = ({ navigation }) => {
-  const [isPopupVisible, setIsPopupVisible] = useState(false);
-
   const handleAddPatient = () => {
-    setIsPopupVisible(false);
-    // TODO: Implement add patient logic
+    navigation.navigate('AddPatient');
   };
 
   const formatDate = (dateString) => {
@@ -69,25 +66,9 @@ const HomeScreen = ({ navigation }) => {
         ))}
       </ScrollView>
 
-      {/* Popup Menu */}
-      {isPopupVisible && (
-        <TouchableOpacity 
-          style={styles.popup}
-          onPress={handleAddPatient}
-        >
-          <Ionicons 
-            name="person-add-outline" 
-            size={24} 
-            color={Colors.lightNavalBlue} 
-          />
-          <Text style={styles.popupText}>New Patient</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Floating Action Button */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => setIsPopupVisible(!isPopupVisible)}
+        onPress={handleAddPatient}
       >
         <Ionicons 
           name="add" 

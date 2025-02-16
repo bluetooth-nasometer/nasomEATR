@@ -1,0 +1,30 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { createClient } from '@supabase/supabase-js'
+import { SB_API_KEY } from '@env'
+
+const supabaseUrl = 'https://wlzjirbzkkfewwfybhim.supabase.co';
+const supabaseKey = SB_API_KEY;
+
+if (!supabaseKey) {
+  console.error('Missing Supabase API key');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    storage: AsyncStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
+
+// Session change listener
+supabase.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'SIGNED_OUT') {
+    try {
+      await AsyncStorage.clear();
+    } catch (error) {
+      console.error('Error clearing data:', error);
+    }
+  }
+});

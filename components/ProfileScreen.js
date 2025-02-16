@@ -6,9 +6,11 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
+import { supabase } from '../utils/supabaseClient';
 
 const ProfileScreen = ({ navigation }) => {
   // Dummy user data - replace with actual user data later
@@ -32,6 +34,16 @@ const ProfileScreen = ({ navigation }) => {
       </View>
     </TouchableOpacity>
   );
+
+  const handleSignOut = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      navigation.replace('Login');
+    } catch (error) {
+      Alert.alert('Error signing out', error.message);
+    }
+  };
 
   return (
     <ScrollView style={styles.container}>
@@ -131,7 +143,7 @@ const ProfileScreen = ({ navigation }) => {
         {/* Sign Out */}
         <TouchableOpacity 
           style={styles.signOutButton}
-          onPress={() => navigation.replace('Login')}
+          onPress={handleSignOut}
         >
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>

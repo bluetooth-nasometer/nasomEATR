@@ -5,25 +5,99 @@ import {
   TextInput, 
   TouchableOpacity, 
   StyleSheet, 
-  Dimensions 
+  Dimensions,
+  Alert 
 } from 'react-native';
 import Colors from '../constants/Colors';
+import { supabase } from '../utils/supabaseClient';
 
 const SignupScreen = ({ navigation }) => {
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSignup = () => {
-    // TODO: Implement actual signup logic
-    if (username && password && password === confirmPassword) {
-      navigation.replace('Home');
+  const handleSignup = async () => {
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    if (!email || !password || !fullName || !username) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // 1. Create auth user first
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            username: username,
+          }
+        }
+      });
+
+      if (authError) throw authError;
+
+      // 2. Insert into clinician table using auth user's UUID
+      const { error: insertError } = await supabase
+        .from('clinician')
+        .insert([
+          {
+            id: authData.user.id,  // Using UUID from auth
+            email: email,
+            username: username,
+            full_name: fullName,
+          }
+        ]);
+
+      if (insertError) {
+        // If clinician insert fails, clean up auth user
+        await supabase.auth.admin.deleteUser(authData.user.id);
+        throw insertError;
+      }
+
+      Alert.alert(
+        'Success', 
+        'Please check your email for verification link',
+        [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+      );
+
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Create Account</Text>
+      
+      <TextInput
+        style={styles.input}
+        placeholder="Full Name"
+        value={fullName}
+        onChangeText={setFullName}
+        autoCapitalize="words"
+      />
+
+      <TextInput
+        style={styles.input}
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        keyboardType="email-address"
+      />
       
       <TextInput
         style={styles.input}
@@ -49,8 +123,14 @@ const SignupScreen = ({ navigation }) => {
         secureTextEntry
       />
       
-      <TouchableOpacity style={styles.button} onPress={handleSignup}>
-        <Text style={styles.buttonText}>Sign Up</Text>
+      <TouchableOpacity 
+        style={[styles.button, loading && styles.buttonDisabled]} 
+        onPress={handleSignup}
+        disabled={loading}
+      >
+        <Text style={styles.buttonText}>
+          {loading ? 'Creating Account...' : 'Sign Up'}
+        </Text>
       </TouchableOpacity>
       
       <TouchableOpacity 
@@ -109,6 +189,9 @@ const styles = StyleSheet.create({
   loginText: {
     color: Colors.lightNavalBlue,
     fontSize: 16,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
 });
 

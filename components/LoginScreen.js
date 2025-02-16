@@ -1,22 +1,52 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
   TextInput, 
   TouchableOpacity, 
   StyleSheet, 
-  Dimensions 
+  Dimensions,
+  Alert 
 } from 'react-native';
 import Colors from '../constants/Colors';
+import { supabase } from '../utils/supabaseClient';
 
 const LoginScreen = ({ navigation }) => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    // TODO: Implement actual authentication
-    if (username && password) {
-      navigation.replace('MainApp');
+  useEffect(() => {
+    // Check for existing session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        navigation.replace('MainApp');
+      }
+    });
+  }, []);
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      if (data) {
+        navigation.replace('MainApp');
+      }
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -26,10 +56,11 @@ const LoginScreen = ({ navigation }) => {
       
       <TextInput
         style={styles.input}
-        placeholder="Username"
-        value={username}
-        onChangeText={setUsername}
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
         autoCapitalize="none"
+        keyboardType="email-address"
       />
       
       <TextInput
@@ -40,8 +71,14 @@ const LoginScreen = ({ navigation }) => {
         secureTextEntry
       />
       
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Sign In</Text>
+      <TouchableOpacity 
+        style={[styles.button, loading && styles.buttonDisabled]}
+        onPress={handleLogin}
+        disabled={loading}
+      >
+        <Text style={styles.buttonText}>
+          {loading ? 'Signing in...' : 'Sign In'}
+        </Text>
       </TouchableOpacity>
       
       <TouchableOpacity 
@@ -100,6 +137,9 @@ const styles = StyleSheet.create({
   signupText: {
     color: Colors.lightNavalBlue,
     fontSize: 16,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
 });
 

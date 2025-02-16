@@ -7,10 +7,13 @@ import {
   StyleSheet,
   ScrollView,
   Image,
+  Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
+import { supabase } from '../utils/supabaseClient';
+import uuid from 'react-native-uuid';
 
 const AddPatientScreen = ({ navigation }) => {
   const [name, setName] = useState('');
@@ -20,6 +23,7 @@ const AddPatientScreen = ({ navigation }) => {
   const [day, setDay] = useState('');
   const [mrn, setMrn] = useState('');
   const [image, setImage] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -34,11 +38,57 @@ const AddPatientScreen = ({ navigation }) => {
     }
   };
 
+  // const uploadImage = async (uri) => {
+  //   try {
+  //     const photoPath = `patient-photos/${uuid.v4()}.jpg`;
+  //     const photo = {
+  //       uri: uri,
+  //       type: "image/jpeg",
+  //       name: "upload.jpg"
+  //     };
+
+  //     // Convert URI to Blob
+  //     const response = await fetch(uri);
+  //     const blob = await response.blob();
+
+  //     // Upload to Supabase storage
+  //     const { data, error } = await supabase.storage
+  //       .from('patient-photos')
+  //       .upload(photoPath, blob);
+
+  //     if (error) throw error;
+
+  //     // Get public URL
+  //     const { data: { publicUrl } } = supabase.storage
+  //       .from('patient-photos')
+  //       .getPublicUrl(photoPath);
+
+  //     return publicUrl;
+  //   } catch (error) {
+  //     console.error('Error uploading image:', error);
+  //     throw error;
+  //   }
+  // };
+
+  const checkMRNUnique = async (mrn) => {
+    const { data, error } = await supabase
+      .from('patient')
+      .select('mrn')
+      .eq('mrn', mrn)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+
+    return !data;
+  };
+
   const validateDate = (text, type) => {
     const num = parseInt(text);
     switch (type) {
       case 'year':
-        if (num > 1900 && num <= new Date().getFullYear()) {
+        if (num > 0 && num <= new Date().getFullYear()) {
           setYear(text);
         }
         break;
@@ -55,10 +105,54 @@ const AddPatientScreen = ({ navigation }) => {
     }
   };
 
-  const handleSubmit = () => {
-    const birthDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-    // TODO: Validate date and save patient
-    navigation.goBack();
+  const handleSubmit = async () => {
+    if (!name || !gender || !year || !month || !day || !mrn) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Validate MRN uniqueness
+      const isUnique = await checkMRNUnique(mrn);
+      if (!isUnique) {
+        Alert.alert('Error', 'This MRN already exists');
+        return;
+      }
+
+      // Get current clinician's ID
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No user logged in');
+
+      // Upload image if exists
+      let pictureUrl = null;
+      // if (image) {
+      //   pictureUrl = await uploadImage(image);
+      // }
+
+      // Create patient record
+      const { error: insertError } = await supabase
+        .from('patient')
+        .insert([{
+          mrn: parseInt(mrn),
+          full_name: name,
+          dob: `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
+          gender: gender,
+          assigned_clinician: user.id,
+          picture_url: pictureUrl
+        }]);
+
+      if (insertError) throw insertError;
+
+      Alert.alert('Success', 'Patient added successfully', [
+        { text: 'OK', onPress: () => navigation.goBack() }
+      ]);
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -145,6 +239,16 @@ const AddPatientScreen = ({ navigation }) => {
           onChangeText={setMrn}
           textAlign="center"
         />
+
+        <TouchableOpacity 
+          style={[styles.submitButton, loading && styles.buttonDisabled]}
+          onPress={handleSubmit}
+          disabled={loading}
+        >
+          <Text style={styles.submitButtonText}>
+            {loading ? 'Adding Patient...' : 'Add Patient'}
+          </Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -258,6 +362,22 @@ const styles = StyleSheet.create({
   },
   centerText: {
     textAlign: 'center',
+  },
+  submitButton: {
+    backgroundColor: Colors.lightNavalBlue,
+    width: '100%',
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  submitButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
 });
 

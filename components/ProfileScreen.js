@@ -1,10 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   TouchableOpacity,
   Alert,
 } from 'react-native';
@@ -13,27 +12,32 @@ import Colors from '../constants/Colors';
 import { supabase } from '../utils/supabaseClient';
 
 const ProfileScreen = ({ navigation }) => {
-  // Dummy user data - replace with actual user data later
-  const user = {
-    name: "Dr. ___",
-    email: "___@___.___",
-    role: "Speech Pathologist",
-    organization: "CHOC",
-    avatarUrl: null // Add default avatar image path here
-  };
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const SettingSection = ({ title, icon, onPress, showBadge }) => (
-    <TouchableOpacity style={styles.settingItem} onPress={onPress}>
-      <View style={styles.settingIcon}>
-        <Ionicons name={icon} size={24} color={Colors.lightNavalBlue} />
-      </View>
-      <Text style={styles.settingText}>{title}</Text>
-      <View style={styles.settingRight}>
-        {showBadge && <View style={styles.badge} />}
-        <Ionicons name="chevron-forward" size={20} color="#666" />
-      </View>
-    </TouchableOpacity>
-  );
+  useEffect(() => {
+    fetchUserData();
+  }, []);
+
+  const fetchUserData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('No user logged in');
+
+      const { data, error } = await supabase
+        .from('clinician')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (error) throw error;
+      setUserData(data);
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSignOut = async () => {
     try {
@@ -46,109 +50,113 @@ const ProfileScreen = ({ navigation }) => {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Profile Header */}
+    <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <View style={styles.profileHeader}>
-          <Image
-            source={user.avatarUrl || require('../assets/splash-icon.png')}
-            style={styles.avatar}
-          />
-          <View style={styles.profileInfo}>
-            <Text style={styles.name}>{user.name}</Text>
-            <Text style={styles.role}>{user.role}</Text>
-            <Text style={styles.organization}>{user.organization}</Text>
-          </View>
-          <TouchableOpacity style={styles.editButton}>
-            <Ionicons name="pencil" size={20} color={Colors.white} />
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity 
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <Ionicons name="chevron-back" size={24} color={Colors.lightNavalBlue} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Profile</Text>
       </View>
 
-      {/* Settings Sections */}
-      <View style={styles.settingsContainer}>
-        {/* Account Settings */}
-        <Text style={styles.sectionTitle}>Account</Text>
-        <SettingSection 
-          title="Personal Information" 
-          icon="person-outline" 
-          onPress={() => {}}
-        />
-        <SettingSection 
-          title="Security" 
-          icon="shield-outline" 
-          onPress={() => {}}
-        />
-        <SettingSection 
-          title="Linked Accounts" 
-          icon="link-outline" 
-          onPress={() => {}}
-        />
+      <ScrollView style={styles.content}>
+        {/* User Info Card */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Account Information</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.label}>Name</Text>
+            <Text style={styles.value}>{userData?.full_name || '---'}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.label}>Email</Text>
+            <Text style={styles.value}>{userData?.email || '---'}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.label}>Username</Text>
+            <Text style={styles.value}>{userData?.username || '---'}</Text>
+          </View>
+        </View>
 
-        {/* App Preferences */}
-        <Text style={styles.sectionTitle}>Preferences</Text>
-        <SettingSection 
-          title="App Theme" 
-          icon="color-palette-outline" 
-          onPress={() => {}}
-        />
-        <SettingSection 
-          title="Notifications" 
-          icon="notifications-outline" 
-          onPress={() => {}}
-          showBadge={true}
-        />
-        <SettingSection 
-          title="Language" 
-          icon="language-outline" 
-          onPress={() => {}}
-        />
+        {/* Settings Section */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Settings</Text>
+          
+          {/* Account Settings */}
+          <Text style={styles.sectionLabel}>Account</Text>
+          <TouchableOpacity style={styles.settingItem}>
+            <Ionicons name="person-outline" size={24} color={Colors.lightNavalBlue} />
+            <Text style={styles.settingText}>Edit Profile</Text>
+            <Ionicons name="chevron-forward" size={24} color="#666" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.settingItem}>
+            <Ionicons name="lock-closed-outline" size={24} color={Colors.lightNavalBlue} />
+            <Text style={styles.settingText}>Change Password</Text>
+            <Ionicons name="chevron-forward" size={24} color="#666" />
+          </TouchableOpacity>
 
-        {/* Data Management */}
-        <Text style={styles.sectionTitle}>Data</Text>
-        <SettingSection 
-          title="Export Data" 
-          icon="download-outline" 
-          onPress={() => {}}
-        />
-        <SettingSection 
-          title="Backup Settings" 
-          icon="cloud-upload-outline" 
-          onPress={() => {}}
-        />
-        <SettingSection 
-          title="Storage Management" 
-          icon="folder-outline" 
-          onPress={() => {}}
-        />
+          {/* Data Management */}
+          <Text style={styles.sectionLabel}>Data Management</Text>
+          <TouchableOpacity style={styles.settingItem}>
+            <Ionicons name="download-outline" size={24} color={Colors.lightNavalBlue} />
+            <Text style={styles.settingText}>Export Patient Data</Text>
+            <Ionicons name="chevron-forward" size={24} color="#666" />
+          </TouchableOpacity>
 
-        {/* Help & Support */}
-        <Text style={styles.sectionTitle}>Support</Text>
-        <SettingSection 
-          title="Help Center" 
-          icon="help-circle-outline" 
-          onPress={() => {}}
-        />
-        <SettingSection 
-          title="Contact Support" 
-          icon="mail-outline" 
-          onPress={() => {}}
-        />
-        <SettingSection 
-          title="About nasomEATR" 
-          icon="information-circle-outline" 
-          onPress={() => {}}
-        />
+          <TouchableOpacity style={styles.settingItem}>
+            <Ionicons name="sync-outline" size={24} color={Colors.lightNavalBlue} />
+            <Text style={styles.settingText}>Backup Settings</Text>
+            <Ionicons name="chevron-forward" size={24} color="#666" />
+          </TouchableOpacity>
 
-        {/* Sign Out */}
+          {/* App Settings */}
+          <Text style={styles.sectionLabel}>App Settings</Text>
+          <TouchableOpacity style={styles.settingItem}>
+            <Ionicons name="options-outline" size={24} color={Colors.lightNavalBlue} />
+            <Text style={styles.settingText}>Calibration Settings</Text>
+            <Ionicons name="chevron-forward" size={24} color="#666" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.settingItem}>
+            <Ionicons name="recording-outline" size={24} color={Colors.lightNavalBlue} />
+            <Text style={styles.settingText}>Recording Preferences</Text>
+            <Ionicons name="chevron-forward" size={24} color="#666" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.settingItem}>
+            <Ionicons name="notifications-outline" size={24} color={Colors.lightNavalBlue} />
+            <Text style={styles.settingText}>Notifications</Text>
+            <Ionicons name="chevron-forward" size={24} color="#666" />
+          </TouchableOpacity>
+
+          {/* Help & Support */}
+          <Text style={styles.sectionLabel}>Help & Support</Text>
+          <TouchableOpacity style={styles.settingItem}>
+            <Ionicons name="help-circle-outline" size={24} color={Colors.lightNavalBlue} />
+            <Text style={styles.settingText}>User Guide</Text>
+            <Ionicons name="chevron-forward" size={24} color="#666" />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.settingItem}>
+            <Ionicons name="information-circle-outline" size={24} color={Colors.lightNavalBlue} />
+            <Text style={styles.settingText}>About nasomEATR</Text>
+            <Ionicons name="chevron-forward" size={24} color="#666" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Sign Out Button */}
         <TouchableOpacity 
           style={styles.signOutButton}
           onPress={handleSignOut}
         >
+          <Ionicons name="exit-outline" size={24} color={Colors.white} />
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
 
@@ -158,93 +166,91 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   header: {
-    backgroundColor: Colors.lightNavalBlue,
-    paddingTop: 60,
-    paddingBottom: 20,
-  },
-  profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    backgroundColor: Colors.white,
   },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#ddd',
+  backButton: {
+    marginRight: 10,
   },
-  profileInfo: {
-    flex: 1,
-    marginLeft: 20,
-  },
-  name: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.white,
-  },
-  role: {
-    fontSize: 14,
-    color: Colors.white,
-    opacity: 0.9,
-  },
-  organization: {
-    fontSize: 14,
-    color: Colors.white,
-    opacity: 0.8,
-  },
-  editButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    padding: 8,
-    borderRadius: 20,
-  },
-  settingsContainer: {
-    padding: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
+  headerTitle: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: Colors.lightNavalBlue,
-    marginTop: 25,
-    marginBottom: 10,
+  },
+  content: {
+    flex: 1,
+    padding: 20,
+  },
+  card: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.lightNavalBlue,
+    marginBottom: 15,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  label: {
+    fontSize: 16,
+    color: '#666',
+  },
+  value: {
+    fontSize: 16,
+    color: Colors.lightNavalBlue,
+    fontWeight: '500',
   },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  settingIcon: {
-    width: 40,
+    borderBottomColor: '#eee',
   },
   settingText: {
     flex: 1,
+    marginLeft: 15,
     fontSize: 16,
     color: '#333',
   },
-  settingRight: {
+  signOutButton: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  badge: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'red',
-    marginRight: 10,
-  },
-  signOutButton: {
-    marginTop: 30,
-    marginBottom: 50,
+    justifyContent: 'center',
+    backgroundColor: Colors.lightNavalBlue,
     padding: 15,
     borderRadius: 10,
-    backgroundColor: '#ff6b6b',
-    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 40,
   },
   signOutText: {
     color: Colors.white,
     fontSize: 16,
     fontWeight: 'bold',
+    marginLeft: 10,
+  },
+  sectionLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 20,
+    marginBottom: 10,
+    fontWeight: '500',
   },
 });
 

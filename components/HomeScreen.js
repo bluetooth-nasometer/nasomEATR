@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
@@ -14,6 +15,8 @@ import { supabase } from '../utils/supabaseClient';
 
 const HomeScreen = ({ navigation }) => {
   const [patients, setPatients] = useState([]);
+  const [filteredPatients, setFilteredPatients] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -79,6 +82,32 @@ const HomeScreen = ({ navigation }) => {
     });
   };
 
+  // Update the search filter function
+  const handleSearch = (text) => {
+    setSearchQuery(text);
+    if (text.trim() === '') {
+      setFilteredPatients(patients); // Show all patients when search is empty
+      return;
+    }
+
+    const filtered = patients.filter(patient => {
+      const searchTerms = text.toLowerCase().split(' ');
+      const patientName = patient.name.toLowerCase();
+      const patientMRN = patient.mrn.toString().toLowerCase();
+      
+      return searchTerms.every(term => 
+        patientName.includes(term) || patientMRN.includes(term)
+      );
+    });
+
+    setFilteredPatients(filtered);
+  };
+
+  // Add this useEffect to initialize filteredPatients with all patients
+  useEffect(() => {
+    setFilteredPatients(patients);
+  }, [patients]);
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centerContent]}>
@@ -89,10 +118,42 @@ const HomeScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+      {/* New Header */}
       <View style={styles.header}>
+        <TouchableOpacity 
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <Ionicons name="chevron-back" size={24} color={Colors.lightNavalBlue} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Patient List</Text>
       </View>
       
+      {/* Updated Search Bar */}
+      <View style={styles.searchContainer}>
+        <Ionicons 
+          name="search" 
+          size={20} 
+          color="#666" 
+          style={styles.searchIcon}
+        />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search patients..."
+          placeholderTextColor="#666"
+          value={searchQuery}
+          onChangeText={handleSearch}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity 
+            style={styles.clearButton}
+            onPress={() => handleSearch('')}
+          >
+            <Ionicons name="close-circle" size={20} color="#666" />
+          </TouchableOpacity>
+        )}
+      </View>
+
       <ScrollView 
         style={styles.patientList}
         refreshControl={
@@ -106,35 +167,30 @@ const HomeScreen = ({ navigation }) => {
       >
         {patients.length === 0 ? (
           <Text style={styles.noPatients}>No patients assigned yet</Text>
+        ) : filteredPatients.length === 0 ? (
+          <Text style={styles.noResults}>No matching patients found</Text>
         ) : (
-          patients.map((patient) => (
+          filteredPatients.map((patient) => (
             <TouchableOpacity 
               key={patient.mrn}
               style={styles.patientCard}
-              onPress={() => navigation.navigate('PatientDetails', { patient })}
+              onPress={() => navigation.navigate('PatientDetail', { patient })}
             >
               <Text style={styles.patientName}>{patient.name}</Text>
-              <Text style={styles.patientInfo}>
-                MRN: {patient.mrn} • DOB: {formatDate(patient.dob)}
-              </Text>
-              <View style={styles.patientDetails}>
-                <Text style={styles.detailText}>
-                  {patient.testsCount} tests
-                </Text>
-                <Text style={styles.detailText}>
-                  Last test: {formatDate(patient.lastTestDate)}
-                </Text>
-              </View>
+              <Text style={styles.patientInfo}>MRN: {patient.mrn}</Text>
+              <Text style={styles.patientInfo}>DOB: {formatDate(patient.dob)}</Text>
             </TouchableOpacity>
           ))
         )}
       </ScrollView>
 
+      {/* Modified Add Patient Button */}
       <TouchableOpacity
-        style={styles.fab}
+        style={styles.addButton}
         onPress={() => navigation.navigate('AddPatient')}
       >
-        <Ionicons name="add" size={30} color="white" />
+        <Ionicons name="add" size={24} color="white" />
+        <Text style={styles.addButtonText}>New Patient</Text>
       </TouchableOpacity>
     </View>
   );
@@ -146,15 +202,46 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   header: {
-    backgroundColor: Colors.lightNavalBlue,
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingTop: 60,
     paddingBottom: 20,
     paddingHorizontal: 20,
+    backgroundColor: Colors.white,
+  },
+  backButton: {
+    marginRight: 10,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: Colors.white,
+    color: Colors.lightNavalBlue,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: Colors.white,
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: 35,
+    zIndex: 1,
+  },
+  searchInput: {
+    flex: 1,
+    height: 40,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 20,
+    paddingLeft: 40,
+    paddingRight: 20,
+    fontSize: 16,
+  },
+  clearButton: {
+    position: 'absolute',
+    right: 30,
+    zIndex: 1,
   },
   patientList: {
     flex: 1,
@@ -229,10 +316,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
+  noResults: {
+    textAlign: 'center',
+    marginTop: 20,
+    fontSize: 16,
+    color: '#666',
+    fontStyle: 'italic',
+  },
   patientInfo: {
     fontSize: 14,
     color: '#666',
     marginBottom: 5,
+  },
+  addButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.lightNavalBlue,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  addButtonText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
 });
 

@@ -3,13 +3,14 @@ import {
   View, 
   Text, 
   TextInput, 
-  TouchableOpacity, 
   StyleSheet, 
   Dimensions,
   Alert 
 } from 'react-native';
 import Colors from '../constants/Colors';
 import { supabase } from '../utils/supabaseClient';
+import LoadingIndicator from './common/LoadingIndicator';
+import Button from './common/Button';
 
 const SignupScreen = ({ navigation }) => {
   const [fullName, setFullName] = useState('');
@@ -78,6 +79,10 @@ const SignupScreen = ({ navigation }) => {
     }
   };
 
+  if (loading) {
+    return <LoadingIndicator text="Creating account..." fullScreen />;
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Create Account</Text>
@@ -123,24 +128,21 @@ const SignupScreen = ({ navigation }) => {
         secureTextEntry
       />
       
-      <TouchableOpacity 
-        style={[styles.button, loading && styles.buttonDisabled]} 
+      <Button 
+        title={loading ? 'Creating Account...' : 'Sign Up'}
         onPress={handleSignup}
         disabled={loading}
-      >
-        <Text style={styles.buttonText}>
-          {loading ? 'Creating Account...' : 'Sign Up'}
-        </Text>
-      </TouchableOpacity>
+        loading={loading}
+        size="large"
+        style={styles.button}
+      />
       
-      <TouchableOpacity 
-        style={styles.loginLink}
+      <Button 
+        title="Already have an account? Sign in"
         onPress={() => navigation.goBack()}
-      >
-        <Text style={styles.loginText}>
-          Already have an account? Sign in
-        </Text>
-      </TouchableOpacity>
+        variant="ghost"
+        style={styles.loginLink}
+      />
     </View>
   );
 };
@@ -170,28 +172,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   button: {
-    backgroundColor: Colors.lightNavalBlue,
     width: Dimensions.get('window').width * 0.8,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginTop: 20,
-  },
-  buttonText: {
-    color: Colors.white,
-    fontSize: 18,
-    fontWeight: 'bold',
   },
   loginLink: {
     marginTop: 20,
-  },
-  loginText: {
-    color: Colors.lightNavalBlue,
-    fontSize: 16,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
   },
 });
 

@@ -49,7 +49,7 @@ const DashboardPage = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity 
+      {/* <TouchableOpacity 
         style={styles.logoutButton}
         onPress={handleSignOut}
       >
@@ -60,7 +60,7 @@ const DashboardPage = ({ navigation }) => {
           style={styles.logoutIcon}
         />
         <Text style={styles.logoutText}>Log Out</Text>
-      </TouchableOpacity>
+      </TouchableOpacity> */}
     </SafeAreaView>
   );
 };

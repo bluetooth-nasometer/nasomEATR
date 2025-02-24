@@ -10,6 +10,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 import { supabase } from '../utils/supabaseClient';
+import SettingsItem from './common/SettingsItem';
+import LoadingIndicator from './common/LoadingIndicator';
+import Button from './common/Button';
 
 const ProfileScreen = ({ navigation }) => {
   const [userData, setUserData] = useState(null);
@@ -49,6 +52,42 @@ const ProfileScreen = ({ navigation }) => {
     }
   };
 
+  const settingsSections = [
+    {
+      label: 'Account',
+      items: [
+        { icon: 'person-outline', text: 'Edit Profile' },
+        { icon: 'lock-closed-outline', text: 'Change Password' }
+      ]
+    },
+    {
+      label: 'Data Management',
+      items: [
+        { icon: 'download-outline', text: 'Export Patient Data' },
+        { icon: 'sync-outline', text: 'Backup Settings' }
+      ]
+    },
+    {
+      label: 'App Settings',
+      items: [
+        { icon: 'options-outline', text: 'Calibration Settings' },
+        { icon: 'recording-outline', text: 'Recording Preferences' },
+        { icon: 'notifications-outline', text: 'Notifications' }
+      ]
+    },
+    {
+      label: 'Help & Support',
+      items: [
+        { icon: 'help-circle-outline', text: 'User Guide' },
+        { icon: 'information-circle-outline', text: 'About nasomEATR' }
+      ]
+    }
+  ];
+
+  if (loading) {
+    return <LoadingIndicator text="Loading profile..." fullScreen />;
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -84,82 +123,36 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Settings</Text>
           
-          {/* Account Settings */}
-          <Text style={styles.sectionLabel}>Account</Text>
-          <TouchableOpacity style={styles.settingItem}>
-            <Ionicons name="person-outline" size={24} color={Colors.lightNavalBlue} />
-            <Text style={styles.settingText}>Edit Profile</Text>
-            <Ionicons name="chevron-forward" size={24} color="#666" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.settingItem}>
-            <Ionicons name="lock-closed-outline" size={24} color={Colors.lightNavalBlue} />
-            <Text style={styles.settingText}>Change Password</Text>
-            <Ionicons name="chevron-forward" size={24} color="#666" />
-          </TouchableOpacity>
-
-          {/* Data Management */}
-          <Text style={styles.sectionLabel}>Data Management</Text>
-          <TouchableOpacity style={styles.settingItem}>
-            <Ionicons name="download-outline" size={24} color={Colors.lightNavalBlue} />
-            <Text style={styles.settingText}>Export Patient Data</Text>
-            <Ionicons name="chevron-forward" size={24} color="#666" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.settingItem}>
-            <Ionicons name="sync-outline" size={24} color={Colors.lightNavalBlue} />
-            <Text style={styles.settingText}>Backup Settings</Text>
-            <Ionicons name="chevron-forward" size={24} color="#666" />
-          </TouchableOpacity>
-
-          {/* App Settings */}
-          <Text style={styles.sectionLabel}>App Settings</Text>
-          <TouchableOpacity style={styles.settingItem}>
-            <Ionicons name="options-outline" size={24} color={Colors.lightNavalBlue} />
-            <Text style={styles.settingText}>Calibration Settings</Text>
-            <Ionicons name="chevron-forward" size={24} color="#666" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.settingItem}>
-            <Ionicons name="recording-outline" size={24} color={Colors.lightNavalBlue} />
-            <Text style={styles.settingText}>Recording Preferences</Text>
-            <Ionicons name="chevron-forward" size={24} color="#666" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.settingItem}>
-            <Ionicons name="notifications-outline" size={24} color={Colors.lightNavalBlue} />
-            <Text style={styles.settingText}>Notifications</Text>
-            <Ionicons name="chevron-forward" size={24} color="#666" />
-          </TouchableOpacity>
-
-          {/* Help & Support */}
-          <Text style={styles.sectionLabel}>Help & Support</Text>
-          <TouchableOpacity style={styles.settingItem}>
-            <Ionicons name="help-circle-outline" size={24} color={Colors.lightNavalBlue} />
-            <Text style={styles.settingText}>User Guide</Text>
-            <Ionicons name="chevron-forward" size={24} color="#666" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.settingItem}>
-            <Ionicons name="information-circle-outline" size={24} color={Colors.lightNavalBlue} />
-            <Text style={styles.settingText}>About nasomEATR</Text>
-            <Ionicons name="chevron-forward" size={24} color="#666" />
-          </TouchableOpacity>
+          {settingsSections.map(section => (
+            <React.Fragment key={section.label}>
+              <Text style={styles.sectionLabel}>{section.label}</Text>
+              {section.items.map(item => (
+                <SettingsItem
+                  key={item.text}
+                  icon={item.icon}
+                  text={item.text}
+                  onPress={() => {}} // Add specific handlers as needed
+                />
+              ))}
+            </React.Fragment>
+          ))}
         </View>
 
         {/* Sign Out Button */}
-        <TouchableOpacity 
-          style={styles.signOutButton}
+        <Button
+          title="Sign Out"
+          icon="exit-outline"
           onPress={handleSignOut}
-        >
-          <Ionicons name="exit-outline" size={24} color={Colors.white} />
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
+          variant="primary"
+          size="large"
+          style={styles.signOutButton}
+        />
       </ScrollView>
     </View>
   );
 };
 
+// Keep existing styles but remove settingItem and settingText styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -216,34 +209,10 @@ const styles = StyleSheet.create({
     color: Colors.lightNavalBlue,
     fontWeight: '500',
   },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  settingText: {
-    flex: 1,
-    marginLeft: 15,
-    fontSize: 16,
-    color: '#333',
-  },
   signOutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.lightNavalBlue,
-    padding: 15,
-    borderRadius: 10,
     marginTop: 20,
     marginBottom: 40,
-  },
-  signOutText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 10,
+    marginHorizontal: 20,
   },
   sectionLabel: {
     fontSize: 14,

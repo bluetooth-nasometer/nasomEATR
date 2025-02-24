@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import Colors from '../constants/Colors';
 import { supabase } from '../utils/supabaseClient';
+import LoadingIndicator from './common/LoadingIndicator';
+import Button from './common/Button';
 
 const { width } = Dimensions.get('window');
 const arcHeight = 300; // Height of the arc background
@@ -54,6 +56,10 @@ const LoginScreen = ({ navigation }) => {
     }
   };
 
+  if (loading) {
+    return <LoadingIndicator text="Signing in..." fullScreen />;
+  }
+
   return (
     <View style={styles.container}>
       {/* Arc Banner with Logo */}
@@ -85,15 +91,14 @@ const LoginScreen = ({ navigation }) => {
           secureTextEntry
         />
         
-        <TouchableOpacity 
-          style={[styles.loginButton, loading && styles.buttonDisabled]}
+        <Button 
+          title={loading ? 'Signing in...' : 'Sign In'}
           onPress={handleLogin}
           disabled={loading}
-        >
-          <Text style={styles.loginButtonText}>
-            {loading ? 'Signing in...' : 'Sign In'}
-          </Text>
-        </TouchableOpacity>
+          loading={loading}
+          size="large"
+          style={styles.loginButton}
+        />
 
         {/* Moved signup section here */}
         <View style={styles.signupContainer}>
@@ -103,12 +108,13 @@ const LoginScreen = ({ navigation }) => {
             <View style={styles.divider} />
           </View>
           
-          <TouchableOpacity 
-            style={styles.signupButton}
+          <Button 
+            title="Sign Up"
             onPress={() => navigation.navigate('Signup')}
-          >
-            <Text style={styles.signupButtonText}>Sign Up</Text>
-          </TouchableOpacity>
+            variant="secondary"
+            size="large"
+            style={styles.signupButton}
+          />
         </View>
       </View>
     </View>
@@ -156,20 +162,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   loginButton: {
-    backgroundColor: Colors.lightNavalBlue,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginTop: 20,
-  },
-  loginButtonText: {
-    color: Colors.white,
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  buttonDisabled: {
-    opacity: 0.7,
   },
   signupContainer: {
     width: '100%',
@@ -192,18 +185,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   signupButton: {
-    backgroundColor: 'transparent',
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: Colors.lightNavalBlue,
-  },
-  signupButtonText: {
-    color: Colors.lightNavalBlue,
-    fontSize: 18,
-    fontWeight: 'bold',
+    width: '100%',
   },
 });
 

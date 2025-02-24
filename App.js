@@ -9,6 +9,7 @@ import SessionsScreen from './components/SessionsScreen';
 import ProfileScreen from './components/ProfileScreen';
 import AddPatientScreen from './components/AddPatientScreen';
 import PatientDetailScreen from './components/PatientDetailScreen';
+import EditPatientScreen from './components/EditPatientScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -26,6 +27,7 @@ export default function App() {
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="AddPatient" component={AddPatientScreen} />
         <Stack.Screen name="PatientDetail" component={PatientDetailScreen} />
+        <Stack.Screen name="EditPatient" component={EditPatientScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

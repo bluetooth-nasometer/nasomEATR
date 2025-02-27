@@ -4,10 +4,10 @@ import {
   StyleSheet, 
   ScrollView, 
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
   TextInput,
-  Text
+  Text,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
@@ -117,48 +117,54 @@ const HomeScreen = ({ navigation }) => {
     setFilteredPatients(patients);
   }, [patients]);
 
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <LoadingIndicator text="Loading patients..." fullScreen />
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      <HeaderBar 
-        title="Patient List" 
-        onBack={() => navigation.goBack()}
-      />
-      
-      {/* Updated Search Bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons 
-          name="search" 
-          size={20} 
-          color="#666" 
-          style={styles.searchIcon}
-        />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search patients..."
-          placeholderTextColor="#666"
-          value={searchQuery}
-          onChangeText={handleSearch}
-        />
-        {searchQuery.length > 0 && (
+      {/* Header with Welcome Message */}
+      <View style={styles.header}>
+        <View style={styles.headerTop}>
           <TouchableOpacity 
-            style={styles.clearButton}
-            onPress={() => handleSearch('')}
+            style={styles.backButton} 
+            onPress={() => navigation.goBack()}
           >
-            <Ionicons name="close-circle" size={20} color="#666" />
+            <Ionicons name="chevron-back" size={24} color={Colors.lightNavalBlue} />
           </TouchableOpacity>
-        )}
+          <Text style={styles.welcomeText}>My Patients</Text>
+        </View>
+        <Text style={styles.patientCount}>
+          {patients.length} {patients.length === 1 ? 'patient' : 'patients'} assigned
+        </Text>
+      </View>
+
+      {/* Enhanced Search Bar */}
+      <View style={styles.searchWrapper}>
+        <View style={[styles.searchContainer, { borderColor: 'white' }]}>
+          <Ionicons 
+            name="search" 
+            size={20} 
+            color="#666" 
+            style={styles.searchIcon}
+          />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by name or MRN"
+            placeholderTextColor="#666"
+            value={searchQuery}
+            onChangeText={handleSearch}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity 
+              style={styles.clearButton}
+              onPress={() => handleSearch('')}
+            >
+              <Ionicons name="close-circle" size={20} color="#666" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <ScrollView 
         style={styles.patientList}
+        contentContainerStyle={styles.patientListContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -168,15 +174,30 @@ const HomeScreen = ({ navigation }) => {
           />
         }
       >
-        {patients.length === 0 ? (
-          <Text style={styles.noPatients}>No patients assigned yet</Text>
+        {loading ? (
+          <LoadingIndicator text="Loading patients..." />
+        ) : patients.length === 0 ? (
+          <View style={styles.emptyStateContainer}>
+            <Ionicons name="people-outline" size={48} color="#666" />
+            <Text style={styles.noPatients}>No patients assigned yet</Text>
+            <Text style={styles.emptyStateSubtext}>
+              Tap the button below to add your first patient
+            </Text>
+          </View>
         ) : filteredPatients.length === 0 ? (
-          <Text style={styles.noResults}>No matching patients found</Text>
+          <View style={styles.emptyStateContainer}>
+            <Ionicons name="search-outline" size={48} color="#666" />
+            <Text style={styles.noResults}>No matching patients found</Text>
+            <Text style={styles.emptyStateSubtext}>
+              Try searching with a different term
+            </Text>
+          </View>
         ) : (
           filteredPatients.map((patient) => (
             <TouchableOpacity 
               key={patient.mrn}
               onPress={() => navigation.navigate('PatientDetail', { patient })}
+              style={styles.patientCardWrapper}
             >
               <PatientCard 
                 patient={patient}
@@ -188,7 +209,7 @@ const HomeScreen = ({ navigation }) => {
         )}
       </ScrollView>
 
-      {/* Modified Add Patient Button */}
+      {/* Add Patient FAB */}
       <TouchableOpacity
         style={styles.addButton}
         onPress={() => navigation.navigate('AddPatient')}
@@ -200,98 +221,99 @@ const HomeScreen = ({ navigation }) => {
   );
 };
 
-// Update styles to remove patient card related styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
   },
+  header: {
+    backgroundColor: Colors.white,
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: 'transparent',
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  backButton: {
+    marginRight: 15,
+  },
+  welcomeContainer: {
+    flex: 1,
+  },
+  welcomeText: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: Colors.lightNavalBlue,
+  },
+  patientCount: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 39, // Same as backButton width + marginRight
+  },
+  searchWrapper: {
+    backgroundColor: Colors.white,
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: 'transparent',
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: Colors.white,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 25,
+    paddingHorizontal: 15,
+    borderWidth: 1,
+    borderColor: 'white',
   },
   searchIcon: {
-    position: 'absolute',
-    left: 35,
-    zIndex: 1,
+    marginRight: 10,
   },
   searchInput: {
     flex: 1,
-    height: 40,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 20,
-    paddingLeft: 40,
-    paddingRight: 20,
+    height: 45,
     fontSize: 16,
+    color: '#333',
   },
   clearButton: {
-    position: 'absolute',
-    right: 30,
-    zIndex: 1,
+    padding: 5,
   },
   patientList: {
     flex: 1,
+  },
+  patientListContent: {
     padding: 15,
+    paddingBottom: 100,
   },
-  patientCard: null, // Remove this
-  patientName: null, // Remove this
-  patientInfo: null, // Remove this
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 15,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Colors.lightNavalBlue,
+  patientCardWrapper: {
+    marginBottom: 10,
+  },
+  emptyStateContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    paddingTop: 100,
   },
-  popup: {
-    position: 'absolute',
-    right: 20,
-    bottom: 80,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    backgroundColor: 'white',
-    borderRadius: 8,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  popupText: {
-    marginLeft: 12,
-    fontSize: 16,
-    color: Colors.lightNavalBlue,
-    fontWeight: '500',
-  },
-  centerContent: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#888',
+    marginTop: 8,
   },
   noPatients: {
-    textAlign: 'center',
-    marginTop: 20,
+    marginTop: 16,
     fontSize: 16,
     color: '#666',
+    textAlign: 'center',
   },
   noResults: {
-    textAlign: 'center',
-    marginTop: 20,
+    marginTop: 16,
     fontSize: 16,
     color: '#666',
-    fontStyle: 'italic',
+    textAlign: 'center',
   },
   addButton: {
     position: 'absolute',

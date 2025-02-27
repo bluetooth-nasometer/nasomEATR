@@ -145,26 +145,53 @@ const AddPatientScreen = ({ navigation }) => {
     }
   };
 
-  const rightComponent = (
-    <Button
-      title="Save"
-      onPress={handleSubmit}
-      variant="ghost"
-      size="small"
-      disabled={loading}
-    />
-  );
+  const calculateProgress = () => {
+    let progress = 0;
+    if (name) progress += 20;
+    if (gender) progress += 20;
+    if (mrn) progress += 20;
+    if (year && month && day) progress += 20;
+    if (image) progress += 20;
+    return progress;
+  };
 
   return (
     <View style={styles.container}>
       <HeaderBar 
         title="Add New Patient" 
         onBack={() => navigation.goBack()}
-        rightComponent={rightComponent}
+        rightComponent={
+          <Button
+            title="Save"
+            onPress={handleSubmit}
+            variant="ghost"
+            size="small"
+            disabled={loading}
+            textStyle={styles.saveButtonText}
+          />
+        }
       />
       
-      <ScrollView style={styles.container}>
-        <View style={[styles.form, styles.centerContent]}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Progress Indicator */}
+        <View style={styles.progressContainer}>
+          <Text style={styles.progressText}>
+            {loading ? 'Saving...' : 'Fill in patient details'}
+          </Text>
+          <View style={styles.progressBar}>
+            <View 
+              style={[
+                styles.progressFill, 
+                { width: `${calculateProgress()}%` }
+              ]} 
+            />
+          </View>
+        </View>
+
+        <View style={styles.formContainer}>
           <PatientFormFields
             name={name}
             setName={setName}
@@ -177,7 +204,9 @@ const AddPatientScreen = ({ navigation }) => {
             mrn={mrn}
             setMrn={setMrn}
           />
+        </View>
 
+        <View style={styles.submitContainer}>
           <Button
             title={loading ? 'Adding Patient...' : 'Add Patient'}
             onPress={handleSubmit}
@@ -186,30 +215,64 @@ const AddPatientScreen = ({ navigation }) => {
             size="large"
             style={styles.submitButton}
           />
+          <Text style={styles.disclaimer}>
+            By adding this patient, you confirm you have the necessary permissions
+          </Text>
         </View>
       </ScrollView>
     </View>
   );
 };
 
-// Update styles to remove button-specific styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
   },
-  form: {
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  progressContainer: {
+    padding: 20,
+    paddingBottom: 0,
+  },
+  progressBar: {
+    height: 10,
+    backgroundColor: '#eee',
+    borderRadius: 3,
+    marginTop: 10, // Added margin top instead of margin bottom
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: Colors.lightNavalBlue,
+    borderRadius: 3,
+  },
+  progressText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  formContainer: {
     padding: 20,
   },
-  centerContent: {
-    alignItems: 'center',
+  submitContainer: {
+    padding: 20,
+    paddingTop: 0,
   },
   submitButton: {
     width: '100%',
-    marginTop: 20,
+    marginBottom: 12,
   },
-  // Remove submitButtonText and buttonDisabled styles
-  saveButton: {
+  disclaimer: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+  },
+  saveButtonText: {
     color: Colors.lightNavalBlue,
     fontSize: 16,
     fontWeight: '600',

@@ -10,6 +10,8 @@ import ProfileScreen from './components/ProfileScreen';
 import AddPatientScreen from './components/AddPatientScreen';
 import PatientDetailScreen from './components/PatientDetailScreen';
 import EditPatientScreen from './components/EditPatientScreen';
+import CalibrationScreen from './components/CalibrationScreen';
+import TestScreen from './components/TestScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -28,6 +30,8 @@ export default function App() {
         <Stack.Screen name="AddPatient" component={AddPatientScreen} />
         <Stack.Screen name="PatientDetail" component={PatientDetailScreen} />
         <Stack.Screen name="EditPatient" component={EditPatientScreen} />
+        <Stack.Screen name="Calibration" component={CalibrationScreen} />
+        <Stack.Screen name="Test" component={TestScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

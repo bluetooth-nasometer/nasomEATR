@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
@@ -54,89 +55,95 @@ const ProfileScreen = ({ navigation }) => {
 
   const settingsSections = [
     {
-      label: 'Account',
+      label: 'Device Settings',
+      icon: 'bluetooth',
       items: [
-        { icon: 'person-outline', text: 'Edit Profile' },
-        { icon: 'lock-closed-outline', text: 'Change Password' }
+        { 
+          icon: 'options-outline', 
+          text: 'Calibration Settings', 
+          onPress: () => navigation.navigate('Calibration'),
+          badge: 'Required'
+        },
+        { 
+          icon: 'mic-outline', 
+          text: 'Recording Preferences',
+          chevron: true
+        }
+      ]
+    },
+    {
+      label: 'Account',
+      icon: 'person',
+      items: [
+        { icon: 'person-outline', text: 'Edit Profile', chevron: true },
+        { icon: 'lock-closed-outline', text: 'Change Password', chevron: true },
+        { icon: 'notifications-outline', text: 'Notifications', chevron: true }
       ]
     },
     {
       label: 'Data Management',
+      icon: 'server',
       items: [
-        { icon: 'download-outline', text: 'Export Patient Data' },
-        { icon: 'sync-outline', text: 'Backup Settings' }
+        { icon: 'download-outline', text: 'Export Patient Data', chevron: true },
+        { icon: 'sync-outline', text: 'Backup Settings', chevron: true }
       ]
     },
     {
-      label: 'App Settings',
+      label: 'Help & Info',
+      icon: 'information-circle',
       items: [
-        { icon: 'options-outline', text: 'Calibration Settings' },
-        { icon: 'recording-outline', text: 'Recording Preferences' },
-        { icon: 'notifications-outline', text: 'Notifications' }
-      ]
-    },
-    {
-      label: 'Help & Support',
-      items: [
-        { icon: 'help-circle-outline', text: 'User Guide' },
-        { icon: 'information-circle-outline', text: 'About nasomEATR' }
+        { icon: 'help-circle-outline', text: 'User Guide', chevron: true },
+        { icon: 'information-circle-outline', text: 'About nasomEATR', chevron: true }
       ]
     }
   ];
 
-  if (loading) {
-    return <LoadingIndicator text="Loading profile..." fullScreen />;
-  }
+  if (loading) return <LoadingIndicator text="Loading profile..." fullScreen />;
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="chevron-back" size={24} color={Colors.lightNavalBlue} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
       </View>
 
       <ScrollView style={styles.content}>
-        {/* User Info Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Account Information</Text>
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>Name</Text>
-            <Text style={styles.value}>{userData?.full_name || '---'}</Text>
+        {/* Profile Card */}
+        <View style={styles.profileCard}>
+          <View style={styles.avatarContainer}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {userData?.full_name?.charAt(0) || '?'}
+              </Text>
+            </View>
           </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>Email</Text>
-            <Text style={styles.value}>{userData?.email || '---'}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.label}>Username</Text>
-            <Text style={styles.value}>{userData?.username || '---'}</Text>
-          </View>
+          <Text style={styles.userName}>{userData?.full_name || 'User'}</Text>
+          <Text style={styles.userEmail}>{userData?.email || 'No email'}</Text>
         </View>
 
-        {/* Settings Section */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Settings</Text>
-          
-          {settingsSections.map(section => (
-            <React.Fragment key={section.label}>
+        {/* Settings Sections */}
+        {settingsSections.map((section, index) => (
+          <View key={section.label} style={styles.settingsSection}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name={section.icon} size={20} color={Colors.lightNavalBlue} />
               <Text style={styles.sectionLabel}>{section.label}</Text>
-              {section.items.map(item => (
+            </View>
+            <View style={styles.sectionContent}>
+              {section.items.map((item, itemIndex) => (
                 <SettingsItem
                   key={item.text}
                   icon={item.icon}
                   text={item.text}
-                  onPress={() => {}} // Add specific handlers as needed
+                  onPress={item.onPress}
+                  badge={item.badge}
+                  showChevron={item.chevron}
                 />
               ))}
-            </React.Fragment>
-          ))}
-        </View>
+            </View>
+          </View>
+        ))}
 
         {/* Sign Out Button */}
         <Button
@@ -144,7 +151,6 @@ const ProfileScreen = ({ navigation }) => {
           icon="exit-outline"
           onPress={handleSignOut}
           variant="primary"
-          size="large"
           style={styles.signOutButton}
         />
       </ScrollView>
@@ -152,7 +158,6 @@ const ProfileScreen = ({ navigation }) => {
   );
 };
 
-// Keep existing styles but remove settingItem and settingText styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -178,48 +183,67 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
-  card: {
-    backgroundColor: '#f8f9fa',
+  profileCard: {
+    backgroundColor: Colors.white,
     borderRadius: 15,
     padding: 20,
     marginBottom: 20,
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#eee',
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.lightNavalBlue,
+  avatarContainer: {
     marginBottom: 15,
   },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.lightNavalBlue,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
   },
-  label: {
+  avatarText: {
+    fontSize: 32,
+    color: Colors.white,
+    fontWeight: 'bold',
+  },
+  userName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.lightNavalBlue,
+    marginBottom: 5,
+  },
+  userEmail: {
     fontSize: 16,
     color: '#666',
   },
-  value: {
-    fontSize: 16,
-    color: Colors.lightNavalBlue,
-    fontWeight: '500',
+  settingsSection: {
+    marginBottom: 20,
   },
-  signOutButton: {
-    marginTop: 20,
-    marginBottom: 40,
-    marginHorizontal: 20,
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 10,
   },
   sectionLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 20,
-    marginBottom: 10,
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.lightNavalBlue,
+    marginLeft: 10,
+  },
+  sectionContent: {
+    backgroundColor: Colors.white,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#eee',
+    overflow: 'hidden',
+  },
+  signOutButton: {
+    marginHorizontal: 20,
+    marginTop: 10,
+    marginBottom: 40,
   },
 });
 

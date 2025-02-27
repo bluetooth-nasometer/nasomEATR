@@ -113,8 +113,8 @@ const PatientDetailScreen = ({ route, navigation }) => {
       'What would you like to do?',
       [
         {
-          text: 'Edit Profile',
-          onPress: handleEditProfile,
+          text: 'Cancel',
+          style: 'cancel',
         },
         {
           text: 'Delete Patient',
@@ -122,8 +122,8 @@ const PatientDetailScreen = ({ route, navigation }) => {
           style: 'destructive',
         },
         {
-          text: 'Cancel',
-          style: 'cancel',
+          text: 'Edit Profile',
+          onPress: handleEditProfile,
         },
       ]
     );
@@ -214,65 +214,79 @@ const PatientDetailScreen = ({ route, navigation }) => {
     return unsubscribe;
   }, [navigation]);
 
-  const rightComponent = (
-    <Button
-      icon="ellipsis-vertical"
-      variant="ghost"
-      size="small"
-      onPress={showEditOptions}
-    />
-  );
-
   return (
     <View style={styles.container}>
-      <HeaderBar 
-        title="Patient Profile" 
-        onBack={() => navigation.goBack()}
-        rightComponent={rightComponent}
-      />
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="chevron-back" size={24} color={Colors.lightNavalBlue} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Patient Profile</Text>
+        <TouchableOpacity 
+          style={styles.moreButton}
+          onPress={showEditOptions}
+        >
+          <Ionicons name="ellipsis-vertical" size={24} color={Colors.lightNavalBlue} />
+        </TouchableOpacity>
+      </View>
       
-      <ScrollView>
+      <ScrollView 
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+      >
         <PatientCard 
           patient={patientData}
           formatDate={formatDate}
         />
 
-        {/* Updated Average Nasalance Score Box */}
-        {averageNasalance && (
-          <View style={styles.scoreBox}>
-            <Text style={styles.scoreNumber}>{averageNasalance}%</Text>
-            <Text style={styles.scoreLabel}>Avg. Nasalance</Text>
-            <Text style={styles.scoreDate}>
-              Based on {testHistory.length} test{testHistory.length !== 1 ? 's' : ''}
-            </Text>
+        {/* Stats Card */}
+        <View style={styles.statsCard}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>{testHistory.length}</Text>
+            <Text style={styles.statLabel}>Total Tests</Text>
           </View>
-        )}
+          <View style={styles.statDivider} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumber}>
+              {averageNasalance ? `${averageNasalance}%` : '---'}
+            </Text>
+            <Text style={styles.statLabel}>Avg. Nasalance</Text>
+          </View>
+        </View>
 
         {/* Graph Section */}
-        <View style={styles.graphSection}>
-          <Text style={styles.sectionTitle}>Nasalance over time</Text>
-          <View style={styles.graph}>
-            {/* Graph placeholder */}
-            <View style={styles.graphPlaceholder}>
-              <Text style={styles.placeholderText}>Graph will be displayed here</Text>
-            </View>
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Nasalance over time</Text>
+            <TouchableOpacity>
+              <Ionicons name="analytics-outline" size={20} color={Colors.lightNavalBlue} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.graphPlaceholder}>
+            <Text style={styles.placeholderText}>Graph will be displayed here</Text>
           </View>
         </View>
 
-        {/* Divider */}
-        <View style={styles.divider}>
-          <View style={styles.dot} />
-          <View style={styles.dot} />
-          <View style={styles.dot} />
-        </View>
-
-        {/* Updated Tests History */}
-        <View style={styles.testsSection}>
-          <Text style={styles.sectionTitle}>Test History</Text>
+        {/* Tests History */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Test History</Text>
+            <TouchableOpacity>
+              <Ionicons name="filter-outline" size={20} color={Colors.lightNavalBlue} />
+            </TouchableOpacity>
+          </View>
           {loading ? (
             <LoadingIndicator text="Loading tests..." />
           ) : testHistory.length === 0 ? (
-            <Text style={styles.noTestsText}>No tests recorded yet</Text>
+            <View style={styles.emptyStateContainer}>
+              <Ionicons name="document-text-outline" size={48} color="#666" />
+              <Text style={styles.emptyStateText}>No tests recorded yet</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Start a new test by tapping the button below
+              </Text>
+            </View>
           ) : (
             testHistory.map((test) => (
               <TouchableOpacity 
@@ -294,8 +308,8 @@ const PatientDetailScreen = ({ route, navigation }) => {
         </View>
 
         {/* Notes Section */}
-        <View style={styles.notesSection}>
-          <View style={styles.notesTitleRow}>
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Notes</Text>
             {savingNotes && (
               <Text style={styles.savingIndicator}>Saving...</Text>
@@ -310,14 +324,12 @@ const PatientDetailScreen = ({ route, navigation }) => {
             textAlignVertical="top"
           />
         </View>
-
       </ScrollView>
 
-      {/* FAB */}
       <Button
         title="New Test"
         icon="add"
-        onPress={() => navigation.navigate('NewTest', { patient: patientData })}
+        onPress={() => navigation.navigate('Calibration', { patient: patientData })}
         style={styles.addButton}
         size="large"
       />
@@ -325,53 +337,81 @@ const PatientDetailScreen = ({ route, navigation }) => {
   );
 };
 
-// Update these styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
   },
-  // New styles for score box
-  scoreBox: {
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  backButton: {
+    padding: 5,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.lightNavalBlue,
+    marginLeft: 10,
+  },
+  moreButton: {
+    padding: 5,
+  },
+  contentContainer: {
+    paddingBottom: 100,
+  },
+  statsCard: {
     margin: 20,
     padding: 20,
     backgroundColor: '#f8f9fa',
     borderRadius: 15,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#eee',
   },
-  scoreNumber: {
-    fontSize: 48,
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#eee',
+    marginHorizontal: 20,
+  },
+  statNumber: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: Colors.lightNavalBlue,
-    marginBottom: 8,
-  },
-  scoreLabel: {
-    fontSize: 16,
-    color: '#666',
     marginBottom: 4,
   },
-  scoreDate: {
+  statLabel: {
     fontSize: 14,
-    color: '#888',
+    color: '#666',
   },
-  // Updated existing styles
-  profileCard: null, // Remove this
-  profileImage: null, // Remove this
-  profileInfo: null, // Remove this
-  name: null, // Remove this
-  infoGrid: null, // Remove this
-  infoItem: null, // Remove this
-  infoLabel: null, // Remove this
-  infoValue: null, // Remove this
-  graphSection: {
+  sectionCard: {
+    margin: 20,
+    marginTop: 0,
     padding: 20,
+    backgroundColor: Colors.white,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#eee',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.lightNavalBlue,
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 15,
   },
   graphPlaceholder: {
@@ -384,23 +424,6 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: '#666',
     fontSize: 16,
-  },
-  divider: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.lightNavalBlue,
-    marginHorizontal: 4,
-    opacity: 0.5,
-  },
-  testsSection: {
-    padding: 20,
   },
   testCard: {
     flexDirection: 'row',
@@ -424,35 +447,27 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 4,
   },
-  noTestsText: {
+  emptyStateContainer: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  emptyStateText: {
     textAlign: 'center',
     color: '#666',
     fontSize: 16,
     fontStyle: 'italic',
-    marginTop: 20,
+    marginTop: 10,
+  },
+  emptyStateSubtext: {
+    textAlign: 'center',
+    color: '#888',
+    fontSize: 14,
+    marginTop: 5,
   },
   addButton: {
     position: 'absolute',
     right: 20,
     bottom: 20,
-  },
-  editButton: {
-    padding: 8,
-  },
-  notesSection: {
-    padding: 20,
-    marginBottom: 20,
-  },
-  notesTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  savingIndicator: {
-    fontSize: 14,
-    color: '#666',
-    fontStyle: 'italic',
   },
   notesInput: {
     borderWidth: 1,
@@ -463,6 +478,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
     fontSize: 16,
     lineHeight: 24,
+  },
+  savingIndicator: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
   },
 });
 

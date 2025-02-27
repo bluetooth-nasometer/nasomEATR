@@ -13,6 +13,7 @@ import Colors from '../constants/Colors';
 import { supabase } from '../utils/supabaseClient';
 import LoadingIndicator from './common/LoadingIndicator';
 import Button from './common/Button';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const { width } = Dimensions.get('window');
 const arcHeight = 300; // Height of the arc background
@@ -72,50 +73,65 @@ const LoginScreen = ({ navigation }) => {
         />
       </View>
 
+      {/* Welcome Text */}
+      <View style={styles.welcomeContainer}>
+        <Text style={styles.welcomeSubtitle}>Sign in to continue</Text>
+      </View>
+
       {/* Login Form */}
       <View style={styles.formContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
+        <View style={styles.inputContainer}>
+          <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+        </View>
         
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+        <View style={styles.inputContainer}>
+          <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+        </View>
         
+        <TouchableOpacity style={styles.forgotPassword}>
+          <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+        </TouchableOpacity>
+
         <Button 
-          title={loading ? 'Signing in...' : 'Sign In'}
+          title="Sign In"
           onPress={handleLogin}
           disabled={loading}
           loading={loading}
           size="large"
           style={styles.loginButton}
         />
+      </View>
 
-        {/* Moved signup section here */}
-        <View style={styles.signupContainer}>
-          <View style={styles.dividerContainer}>
-            <View style={styles.divider} />
-            <Text style={styles.dividerText}>Don't have an account?</Text>
-            <View style={styles.divider} />
-          </View>
-          
-          <Button 
-            title="Sign Up"
-            onPress={() => navigation.navigate('Signup')}
-            variant="secondary"
-            size="large"
-            style={styles.signupButton}
-          />
+      {/* Sign Up Section */}
+      <View style={styles.signupContainer}>
+        <View style={styles.dividerContainer}>
+          <View style={styles.divider} />
+          <Text style={styles.dividerText}>New to nasomEATR?</Text>
+          <View style={styles.divider} />
         </View>
+        
+        <Button 
+          title="Create an Account"
+          onPress={() => navigation.navigate('Signup')}
+          variant="secondary"
+          size="large"
+          style={styles.signupButton}
+        />
       </View>
     </View>
   );
@@ -148,26 +164,58 @@ const styles = StyleSheet.create({
     marginTop: 80, // Increased from 40 to 80 to move logo lower
     zIndex: 1,
   },
+  welcomeContainer: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  welcomeTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: Colors.lightNavalBlue,
+    marginBottom: 8,
+  },
+  welcomeSubtitle: {
+    fontSize: 16,
+    color: '#666',
+  },
   formContainer: {
+    width: '100%',
     paddingHorizontal: 20,
-    paddingTop: 20,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 25,
+    marginBottom: 15,
+    paddingHorizontal: 20,
+    backgroundColor: '#f8f9fa',
+  },
+  inputIcon: {
+    marginRight: 10,
   },
   input: {
+    flex: 1,
     height: 50,
-    borderWidth: 1,
-    borderColor: Colors.lightNavalBlue,
-    borderRadius: 25,
-    paddingHorizontal: 20,
-    marginBottom: 15,
     fontSize: 16,
   },
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    marginBottom: 20,
+  },
+  forgotPasswordText: {
+    color: Colors.lightNavalBlue,
+    fontSize: 14,
+  },
   loginButton: {
-    marginTop: 20,
+    marginTop: 10,
   },
   signupContainer: {
     width: '100%',
     paddingHorizontal: 20,
-    marginTop: 100, // Add space between login button and signup section
+    marginTop: 'auto',
+    marginBottom: 30,
   },
   dividerContainer: {
     flexDirection: 'row',
@@ -177,7 +225,7 @@ const styles = StyleSheet.create({
   divider: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: '#eee',
   },
   dividerText: {
     paddingHorizontal: 10,

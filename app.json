@@ -15,7 +15,9 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "This app needs access to the microphone to record audio."
+        "NSMicrophoneUsageDescription": "This app needs access to the microphone to record audio.",
+        "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to connect to audio devices for microphone calibration.",
+        "NSBluetoothPeripheralUsageDescription": "This app uses Bluetooth to connect to audio devices for microphone calibration."
       },
       "bundleIdentifier": "com.jasperdoan.nasomEATR"
     },
@@ -33,7 +35,13 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
       ],
       "package": "com.jasperdoan.nasomEATR"
     },
@@ -53,6 +61,18 @@
           "photosPermission": "Allow nasomEATR to access your media library.",
           "savePhotosPermission": "Allow nasomEATR to save media to your library."
         }
+      ],
+      ["with-rn-bluetooth-classic",
+        {
+          "peripheralUsageDescription": "Allow nasomEATR to check bluetooth peripheral info",
+          "alwaysUsageDescription": "Allow nasomEATR to use bluetooth functionality",
+          "protocols": [
+            "com.jasperdoan.nasomEATR"
+          ]
+        }
+      ],
+      [
+        "react-native-ble-plx"
       ]
     ]
   }

@@ -16,7 +16,7 @@ import HeaderBar from './common/HeaderBar';
 import PatientCard from './common/PatientCard';
 import LoadingIndicator from './common/LoadingIndicator';
 
-const HomeScreen = ({ navigation }) => {
+const PatientListScreen = ({ navigation }) => {
   const [patients, setPatients] = useState([]);
   const [filteredPatients, setFilteredPatients] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -337,6 +337,29 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
+
+  //adding in a progress bar for the process of starting an evaluation
+  progressContainer: {
+    padding: 20,
+    paddingBottom: 0,
+  },
+  progressBar: {
+    height: 10,
+    backgroundColor: '#eee',
+    borderRadius: 3,
+    marginTop: 10, // Added margin top instead of margin bottom
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: Colors.lightNavalBlue,
+    borderRadius: 3,
+  },
+  progressText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
 });
 
-export default HomeScreen;
+export default PatientListScreen;

@@ -40,13 +40,13 @@ const DashboardPage = ({ navigation }) => {
       title: 'Start an Evaluation',
       subtitle: 'Begin a new patient evaluation session',
       icon: 'clipboard-outline',
-      onPress: () => navigation.navigate('HomeTab')
+      onPress: () => navigation.navigate('PatientList')
     },
     {
       title: 'Patient List',
       subtitle: 'View and manage your patients',
       icon: 'people-outline',
-      onPress: () => navigation.navigate('HomeTab')
+      onPress: () => navigation.navigate('PatientList')
     },
     {
       title: 'Settings',

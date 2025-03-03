@@ -144,7 +144,7 @@ const AddPatientScreen = ({ navigation }) => {
       setLoading(false);
     }
   };
-
+  
   const calculateProgress = () => {
     let progress = 0;
     if (name) progress += 20;

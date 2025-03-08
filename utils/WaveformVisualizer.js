@@ -1,49 +1,72 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
-import Colors from '../constants/Colors';
 
-const WaveformVisualizer = ({ amplitude = 0 }) => {
-  // Create 20 bars for the waveform
-  const bars = Array.from({ length: 20 }, (_, index) => {
-    // Create varying heights based on position and amplitude
-    const baseHeight = 3 + Math.abs(index - 10) * 2; // Base height curve
-    const height = baseHeight + (amplitude * 20); // Amplify by current audio level
+const WaveformVisualizer = ({ amplitude = 0, height = 40, width = '100%', color = '#2196f3', bars = 20 }) => {
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+  
+  // Generate an array of bar heights based on the amplitude
+  const generateBars = () => {
+    if (!isMounted.current) return [];
     
-    return (
-      <View
-        key={index}
-        style={[
-          styles.bar,
-          { 
-            height,
-            opacity: amplitude > 0 ? 1 : 0.3
-          }
-        ]}
-      />
-    );
-  });
+    const barWidths = [];
+    
+    for (let i = 0; i < bars; i++) {
+      // Create a wave-like pattern
+      const position = i / bars;
+      const sinValue = Math.sin(position * Math.PI * 2 + Date.now() / 200);
+      
+      // Apply amplitude to the sine wave and ensure it's positive
+      const barHeight = Math.max(0.1, Math.abs(sinValue) * amplitude);
+      
+      barWidths.push(barHeight);
+    }
+    
+    return barWidths;
+  };
 
   return (
-    <View style={styles.container}>
-      {bars}
+    <View style={[styles.container, { height, width }]}>
+      {amplitude > 0 ? (
+        generateBars().map((barHeight, index) => (
+          <View
+            key={index}
+            style={[
+              styles.bar,
+              {
+                height: `${barHeight * 100}%`,
+                backgroundColor: color,
+              },
+            ]}
+          />
+        ))
+      ) : (
+        <View style={styles.flatLine} />
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    height: 30,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    width: '100%',
-    paddingHorizontal: 10,
-    marginTop: 10,
   },
   bar: {
     width: 3,
-    backgroundColor: Colors.lightNavalBlue,
     borderRadius: 2,
+  },
+  flatLine: {
+    height: 1,
+    width: '100%',
+    backgroundColor: '#ccc',
   },
 });
 

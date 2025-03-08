@@ -30,11 +30,12 @@ yarn-error.*
 *.pem
 
 # local env files
-.env*.local
+.env
+*.local
 
 # typescript
 *.tsbuildinfo
 
-android/
-
 ios/
+
+.idea/

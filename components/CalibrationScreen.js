@@ -1,313 +1,464 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Audio } from 'expo-av';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  SafeAreaView,
+  Alert,
+  ScrollView,
+  Platform,
+  PermissionsAndroid,
+  ActivityIndicator
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 import HeaderBar from './common/HeaderBar';
-import Button from './common/Button';
-import WaveformVisualizer from '../utils/WaveformVisualizer';
+import BleManager from '../utils/BluetoothManager';
 
-const StatusCard = ({ title, isConnected, isPairing, amplitude }) => {
-  const getBackgroundColor = () => {
-    if (isPairing) return '#E3F2FD'; // light blue
-    if (isConnected) return '#E8F5E9'; // light green
-    return '#EEEEEE'; // gray
-  };
-
-  const getStatusText = () => {
-    if (isPairing) return 'Pairing...';
-    if (isConnected) return 'Connected';
-    return 'Not Connected';
-  };
-
+// Simplified MicStatusCard without nesting
+const MicStatusCard = ({ title, device }) => {
+  const isConnected = !!device;
+  
   return (
-    <View style={[styles.card, { backgroundColor: getBackgroundColor() }]}>
+    <View style={[
+      styles.card, 
+      isConnected ? styles.connectedCard : styles.disconnectedCard
+    ]}>
       <Text style={styles.cardTitle}>{title}</Text>
-      <View style={styles.iconContainer}>
-        <Ionicons name="mic" size={24} color="#333" style={styles.icon} />
-        <Ionicons name="bluetooth" size={24} color="#333" style={styles.icon} />
-      </View>
-      <Text style={styles.statusText}>{getStatusText()}</Text>
-      <WaveformVisualizer amplitude={amplitude} />
+      
+      {isConnected ? (
+        <Text style={styles.connectedText}>
+          <Ionicons name="bluetooth" size={14} color="#4caf50" />
+          {' ' + device.name}
+        </Text>
+      ) : (
+        <Text style={styles.disconnectedText}>Not Connected</Text>
+      )}
     </View>
   );
 };
 
 const CalibrationScreen = ({ navigation, route }) => {
-  const patient = route.params?.patient;
-  const [recording, setRecording] = useState(null);
-  const [sound, setSound] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [recordedAudioUri, setRecordedAudioUri] = useState(null);
-  const [upperAmplitude, setUpperAmplitude] = useState(0);
-  const [lowerAmplitude, setLowerAmplitude] = useState(0);
-  const [activeTest, setActiveTest] = useState(null);
+  const [nasalMic, setNasalMic] = useState(null);
+  const [oralMic, setOralMic] = useState(null);
+  const [bluetoothEnabled, setBluetoothEnabled] = useState(false);
+  const [connectedDevices, setConnectedDevices] = useState([]);
+  const [loading, setLoading] = useState(true);
 
+  // Component mount
   useEffect(() => {
+    checkPermissionsAndInitialize();
+    
+    // Add device connection listener
+    const deviceListener = BleManager.addListener('connectedDevicesChanged', (devices) => {
+      updateConnectedDevices(devices);
+    });
+    
+    // Clean up
     return () => {
-      cleanupResources();
+      deviceListener.remove();
     };
   }, []);
-
-  const cleanupResources = async () => {
+  
+  // Request permissions and initialize Bluetooth
+  const checkPermissionsAndInitialize = async () => {
     try {
-      if (recording) {
-        await recording.stopAndUnloadAsync();
-      }
-      if (sound) {
-        await sound.unloadAsync();
-      }
-    } catch (error) {
-      console.error('Error cleaning up:', error);
-    }
-  };
-
-  const startRecording = async (micType) => {
-    try {
-      await cleanupResources();
-      await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        playThroughEarpieceAndroid: false,
-        staysActiveInBackground: false,
-      });
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY,
-        (status) => {
-          const amplitude = status.metering || 0;
-          const normalizedAmplitude = Math.min(Math.max(amplitude + 60, 0) / 60, 1);
-          if (micType === 'upper') {
-            setUpperAmplitude(normalizedAmplitude);
-          } else {
-            setLowerAmplitude(normalizedAmplitude);
-          }
-        },
-         100
-      );
-
-      setRecording(recording);
-      setActiveTest(micType);
-      setRecordedAudioUri(null); // Clear previous recording
-    } catch (err) {
-      console.error('Failed to start recording:', err);
-    }
-  };
-
-  const stopRecording = async () => {
-    if (!recording) return;
-
-    try {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      setRecordedAudioUri(uri);
-      setRecording(null);
-    } catch (error) {
-      console.error('Failed to stop recording:', error);
-    }
-
-    setActiveTest(null);
-    setUpperAmplitude(0);
-    setLowerAmplitude(0);
-  };
-
-  const playRecording = async () => {
-    try {
-      if (!recordedAudioUri) return;
-
-      // Unload previous sound if exists
-      if (sound) {
-        await sound.unloadAsync();
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        playThroughEarpieceAndroid: false,
-      });
-
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: recordedAudioUri },
-        { shouldPlay: true }
-      );
-
-      setSound(newSound);
-      setIsPlaying(true);
-
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.didJustFinish) {
-          setIsPlaying(false);
+      setLoading(true);
+      
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN
+        ]);
+        
+        const hasPermissions = 
+          granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === 'granted' &&
+          granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === 'granted';
+          
+        if (!hasPermissions) {
+          Alert.alert(
+            "Permissions Required",
+            "Bluetooth permissions are needed to detect connected devices."
+          );
+          setLoading(false);
+          return;
         }
-      });
-
-      await newSound.playAsync();
-    } catch (error) {
-      console.error('Failed to play recording:', error);
-      setIsPlaying(false);
-    }
-  };
-
-  const handleTestMic = async (type) => {
-    if (activeTest === type) {
-      await stopRecording();
-    } else {
-      if (recording) {
-        await stopRecording();
       }
-      await startRecording(type);
+      
+      // Initialize Bluetooth
+      await BleManager.initialize();
+      
+      // Check if Bluetooth is enabled
+      const isEnabled = await BleManager.isBluetoothEnabled();
+      setBluetoothEnabled(isEnabled);
+      
+      if (isEnabled) {
+        // Get connected devices
+        const devices = await BleManager.getConnectedDevices();
+        updateConnectedDevices(devices);
+      } else {
+        setConnectedDevices([]);
+      }
+    } catch (error) {
+      console.error("Error initializing Bluetooth:", error);
+      setConnectedDevices([]);
+    } finally {
+      setLoading(false);
     }
   };
+  
+  // Update connected devices list
+  const updateConnectedDevices = (devices) => {
+    setConnectedDevices(devices || []);
+  };
+  
+  // Handle opening Bluetooth settings
+  const openBluetoothSettings = async () => {
+    try {
+      await BleManager.openBluetoothSettings();
+      // After returning from settings, re-check Bluetooth status
+      setTimeout(() => {
+        checkPermissionsAndInitialize();
+      }, 1000);
+    } catch (error) {
+      console.error("Error opening Bluetooth settings:", error);
+      Alert.alert("Error", "Unable to open Bluetooth settings. Please enable Bluetooth manually.");
+    }
+  };
+
+  const handleBack = () => {
+    navigation.goBack();
+  };
+
+  const handleProceedToTest = () => {
+    if (!nasalMic || !oralMic) {
+      Alert.alert(
+        "Devices Required",
+        "Please assign both nasal and oral microphones before proceeding to testing."
+      );
+      return;
+    }
+
+    const patient = route.params?.patient;
+    navigation.navigate('Test', { 
+      patient, 
+      nasalMic, 
+      oralMic 
+    });
+  };
+
+  // Create device item component
+  const renderDeviceItem = (device) => (
+    <TouchableOpacity 
+      key={device.id}
+      style={styles.deviceItem} 
+      onPress={() => {
+        Alert.alert(
+          "Assign Device",
+          `Assign "${device.name}" as:`,
+          [
+            {
+              text: "Nasal Microphone",
+              onPress: () => {
+                if (oralMic && oralMic.id === device.id) {
+                  Alert.alert("Already Assigned", "This device is already assigned as Oral Microphone");
+                  return;
+                }
+                setNasalMic(device);
+              }
+            },
+            {
+              text: "Oral Microphone",
+              onPress: () => {
+                if (nasalMic && nasalMic.id === device.id) {
+                  Alert.alert("Already Assigned", "This device is already assigned as Nasal Microphone");
+                  return;
+                }
+                setOralMic(device);
+              }
+            },
+            {
+              text: "Cancel",
+              style: "cancel"
+            }
+          ]
+        );
+      }}
+    >
+      <View>
+        <Text style={styles.deviceName}>{device.name || "Unknown Device"}</Text>
+        <Text style={styles.deviceId}>{device.id}</Text>
+        <Text style={styles.connectedBadgeText}>Connected</Text>
+      </View>
+      
+      <View style={styles.assignButton}>
+        <Text style={styles.assignButtonText}>Assign</Text>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safeArea}>
       <HeaderBar 
-        title="Calibration"
-        onBack={() => navigation.goBack()}
+        title="Device Setup"
+        onBack={handleBack}
       />
       
-      <View style={styles.content}>
-        <StatusCard 
-          title="Nasal/Upper Mic"
-          isConnected={false}
-          isPairing={false}
-          amplitude={upperAmplitude}
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        <Text style={styles.title}>Connected Bluetooth Devices</Text>
+        
+        {!bluetoothEnabled && (
+          <TouchableOpacity 
+            style={styles.bluetoothAlertContainer}
+            onPress={openBluetoothSettings}
+          >
+            <Ionicons name="bluetooth-off" size={20} color="#ff6b6b" />
+            <Text style={styles.bluetoothAlertText}>
+              Bluetooth is disabled. Tap to enable Bluetooth
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color="#ff6b6b" />
+          </TouchableOpacity>
+        )}
+        
+        {bluetoothEnabled && (
+          <Text style={styles.infoText}>
+            Select a device from this list to assign it as a microphone.
+          </Text>
+        )}
+        
+        {/* Device list */}
+        <View style={styles.devicesList}>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={Colors.lightNavalBlue} />
+              <Text style={styles.loadingText}>Scanning for devices...</Text>
+            </View>
+          ) : connectedDevices.length > 0 ? (
+            connectedDevices.map(renderDeviceItem)
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="bluetooth" size={32} color="#999" />
+              <Text style={styles.emptyStateText}>
+                No Bluetooth devices connected
+              </Text>
+              <Text style={styles.emptyStateSubtext}>
+                Please connect Bluetooth devices to your device
+              </Text>
+              <TouchableOpacity 
+                style={styles.refreshButton}
+                onPress={checkPermissionsAndInitialize}
+              >
+                <Text style={styles.refreshButtonText}>Refresh</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+        
+        <Text style={styles.sectionTitle}>Assigned Microphones</Text>
+        
+        <MicStatusCard 
+          title="Nasal Microphone" 
+          device={nasalMic}
         />
         
-        <StatusCard 
-          title="Oral/Lower Mic"
-          isConnected={false}
-          isPairing={false}
-          amplitude={lowerAmplitude}
+        <MicStatusCard 
+          title="Oral Microphone" 
+          device={oralMic}
         />
-      </View>
 
-      <View style={styles.controlsContainer}>
-        <View style={styles.testControls}>
-          <View style={styles.buttonRow}>
-            <Button
-              title={activeTest === 'upper' ? "Stop Test" : "Test Nasal"}
-              icon={activeTest === 'upper' ? "stop" : "mic-outline"}
-              onPress={() => handleTestMic('upper')}
-              style={styles.rowButton}
-              variant={activeTest === 'upper' ? "secondary" : "primary"}
-            />
-            <Button
-              title={activeTest === 'lower' ? "Stop Test" : "Test Oral"}
-              icon={activeTest === 'lower' ? "stop" : "mic-outline"}
-              onPress={() => handleTestMic('lower')}
-              style={styles.rowButton}
-              variant={activeTest === 'lower' ? "secondary" : "primary"}
-            />
-          </View>
-          
-          {recordedAudioUri && (
-            <Button
-              title={isPlaying ? "Playing..." : "Play Recording"}
-              onPress={playRecording}
-              disabled={isPlaying}
-              icon={isPlaying ? "pause" : "play"}
-              style={styles.fullWidthButton}
-              variant="secondary"
-            />
-          )}
-
-          <Button
-            title="Test Both Mics"
-            icon="mic-outline"
-            onPress={() => {}}
-            variant="secondary"
-            style={styles.fullWidthButton}
-            disabled={true}
-          />
-        </View>
-
-        {/* Only show continue button if accessed from patient detail */}
-        {patient && (
-          <>
-            <View style={styles.divider} />
-            <View style={styles.navigationContainer}>
-              <Button
-                title="Continue to Evaluation"
-                onPress={() => navigation.navigate('Test', { patient })}
-                variant="primary"
-                style={styles.continueButton}
-                icon="arrow-forward"
-              />
-            </View>
-          </>
-        )}
-      </View>
-    </View>
+        <TouchableOpacity 
+          style={[
+            styles.proceedButton,
+            (!nasalMic || !oralMic) ? styles.disabledButton : {}
+          ]} 
+          onPress={handleProceedToTest}
+          disabled={!nasalMic || !oralMic}
+        >
+          <Text style={styles.proceedButtonText}>Proceed to Testing</Text>
+          <Ionicons name="arrow-forward" size={18} color="white" />
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: Colors.white,
   },
   content: {
     flex: 1,
+  },
+  contentContainer: {
     padding: 20,
+    paddingBottom: 40,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.lightNavalBlue,
+    marginBottom: 10,
+  },
+  infoText: {
+    color: '#666',
+    marginBottom: 16,
+    backgroundColor: '#e1f5fe',
+    padding: 10,
+    borderRadius: 8,
+  },
+  devicesList: {
+    marginBottom: 20,
+    minHeight: 120,
+  },
+  deviceItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#e8f5e9',
+    marginBottom: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#a5d6a7',
+  },
+  deviceName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+  },
+  deviceId: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+  },
+  connectedBadgeText: {
+    color: '#4caf50',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
+  assignButton: {
+    backgroundColor: Colors.lightNavalBlue,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: 20,
+  },
+  assignButtonText: {
+    color: 'white',
+    fontWeight: '500',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.lightNavalBlue,
+    marginBottom: 10,
+    marginTop: 10,
   },
   card: {
-    padding: 20,
-    borderRadius: 15,
-    alignItems: 'center',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#ddd',
   },
   cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: Colors.lightNavalBlue,
-    marginBottom: 15,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
   },
-  iconContainer: {
+  disconnectedCard: {
+    backgroundColor: '#f5f5f5',
+    borderColor: '#e0e0e0',
+  },
+  connectedCard: {
+    backgroundColor: '#f1f8e9',
+    borderColor: '#c5e1a5',
+  },
+  connectedText: {
+    color: '#4caf50',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  disconnectedText: {
+    color: '#999',
+    fontSize: 15,
+  },
+  proceedButton: {
     flexDirection: 'row',
-    marginBottom: 15,
-    gap: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.lightNavalBlue,
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginTop: 20,
   },
-  icon: {
+  disabledButton: {
+    backgroundColor: '#cccccc',
     opacity: 0.7,
   },
-  statusText: {
+  proceedButtonText: {
+    color: 'white',
     fontSize: 16,
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 10,
     color: '#666',
+    fontSize: 14,
   },
-  controlsContainer: {
-    backgroundColor: Colors.white,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-  },
-  testControls: {
-    padding: 20,
-    gap: 10,
-  },
-  buttonRow: {
+  bluetoothAlertContainer: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
+    backgroundColor: '#ffebee',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
   },
-  rowButton: {
+  bluetoothAlertText: {
     flex: 1,
+    color: '#e53935',
+    fontSize: 14,
+    marginLeft: 8,
   },
-  fullWidthButton: {
-    width: '100%',
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f5f5f5',
+    padding: 30,
+    borderRadius: 8,
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#eee',
-    marginHorizontal: 20,
+  emptyStateText: {
+    marginTop: 10,
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '500',
   },
-  navigationContainer: {
-    padding: 20,
-    backgroundColor: '#f8f9fa',
+  emptyStateSubtext: {
+    color: '#999',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 5,
+    marginBottom: 20,
   },
-  continueButton: {
-    width: '100%',
+  refreshButton: {
+    backgroundColor: Colors.lightNavalBlue,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+  },
+  refreshButtonText: {
+    color: 'white',
+    fontWeight: '500',
   },
 });
 

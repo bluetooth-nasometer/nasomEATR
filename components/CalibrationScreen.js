@@ -14,7 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../constants/Colors';
 import HeaderBar from './common/HeaderBar';
-import BleManager from '../utils/BluetoothManager';
+import RNBluetoothClassic from 'react-native-bluetooth-classic';
 
 // Simplified MicStatusCard without nesting
 const MicStatusCard = ({ title, device }) => {
@@ -50,16 +50,35 @@ const CalibrationScreen = ({ navigation, route }) => {
   useEffect(() => {
     checkPermissionsAndInitialize();
     
-    // Add device connection listener
-    const deviceListener = BleManager.addListener('connectedDevicesChanged', (devices) => {
-      updateConnectedDevices(devices);
-    });
+    // Set up Bluetooth state change listener
+    const subscribeToBluetoothState = async () => {
+      try {
+        RNBluetoothClassic.onStateChanged(handleBluetoothStateChange);
+      } catch (error) {
+        console.error("Error setting up Bluetooth state listener:", error);
+      }
+    };
+    
+    subscribeToBluetoothState();
     
     // Clean up
     return () => {
-      deviceListener.remove();
+      // Remove listeners when component unmounts
+      RNBluetoothClassic.removeOnStateChangeListener();
     };
   }, []);
+  
+  // Handle Bluetooth state changes
+  const handleBluetoothStateChange = (event) => {
+    const isEnabled = event.enabled;
+    setBluetoothEnabled(isEnabled);
+    
+    if (isEnabled) {
+      refreshDevices();
+    } else {
+      setConnectedDevices([]);
+    }
+  };
   
   // Request permissions and initialize Bluetooth
   const checkPermissionsAndInitialize = async () => {
@@ -73,8 +92,8 @@ const CalibrationScreen = ({ navigation, route }) => {
         ]);
         
         const hasPermissions = 
-          granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === 'granted' &&
-          granted[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] === 'granted';
+          granted['android.permission.BLUETOOTH_CONNECT'] === PermissionsAndroid.RESULTS.GRANTED &&
+          granted['android.permission.BLUETOOTH_SCAN'] === PermissionsAndroid.RESULTS.GRANTED;
           
         if (!hasPermissions) {
           Alert.alert(
@@ -86,17 +105,12 @@ const CalibrationScreen = ({ navigation, route }) => {
         }
       }
       
-      // Initialize Bluetooth
-      await BleManager.initialize();
-      
       // Check if Bluetooth is enabled
-      const isEnabled = await BleManager.isBluetoothEnabled();
+      const isEnabled = await RNBluetoothClassic.isBluetoothEnabled();
       setBluetoothEnabled(isEnabled);
       
       if (isEnabled) {
-        // Get connected devices
-        const devices = await BleManager.getConnectedDevices();
-        updateConnectedDevices(devices);
+        await refreshDevices();
       } else {
         setConnectedDevices([]);
       }
@@ -108,22 +122,60 @@ const CalibrationScreen = ({ navigation, route }) => {
     }
   };
   
-  // Update connected devices list
-  const updateConnectedDevices = (devices) => {
-    setConnectedDevices(devices || []);
+  // Refresh the list of devices
+  const refreshDevices = async () => {
+    try {
+      setLoading(true);
+      const devices = await RNBluetoothClassic.getBondedDevices();
+      
+      const formattedDevices = devices.map(device => ({
+        id: device.address,
+        name: device.name || 'Unknown Device',
+        isConnected: true // In react-native-bluetooth-classic, bonded devices are considered connected
+      }));
+      
+      setConnectedDevices(formattedDevices);
+    } catch (error) {
+      console.error("Error getting devices:", error);
+      Alert.alert("Error", "Could not retrieve Bluetooth devices.");
+      setConnectedDevices([]);
+    } finally {
+      setLoading(false);
+    }
   };
   
   // Handle opening Bluetooth settings
   const openBluetoothSettings = async () => {
     try {
-      await BleManager.openBluetoothSettings();
-      // After returning from settings, re-check Bluetooth status
-      setTimeout(() => {
-        checkPermissionsAndInitialize();
-      }, 1000);
+      if (Platform.OS === 'android') {
+        await RNBluetoothClassic.openBluetoothSettings();
+        // After returning from settings, re-check Bluetooth status
+        setTimeout(() => {
+          checkPermissionsAndInitialize();
+        }, 1000);
+      } else {
+        Alert.alert(
+          "Bluetooth Required",
+          "Please enable Bluetooth in your device settings and return to the app."
+        );
+      }
     } catch (error) {
       console.error("Error opening Bluetooth settings:", error);
       Alert.alert("Error", "Unable to open Bluetooth settings. Please enable Bluetooth manually.");
+    }
+  };
+  
+  // Enable Bluetooth directly (Android only)
+  const enableBluetooth = async () => {
+    try {
+      const enabled = await RNBluetoothClassic.requestBluetoothEnabled();
+      if (enabled) {
+        setBluetoothEnabled(true);
+        refreshDevices();
+      }
+    } catch (error) {
+      console.error("Error enabling Bluetooth:", error);
+      Alert.alert("Error", "Unable to enable Bluetooth. Please enable it manually in settings.");
     }
   };
 
@@ -211,7 +263,7 @@ const CalibrationScreen = ({ navigation, route }) => {
         {!bluetoothEnabled && (
           <TouchableOpacity 
             style={styles.bluetoothAlertContainer}
-            onPress={openBluetoothSettings}
+            onPress={Platform.OS === 'android' ? enableBluetooth : openBluetoothSettings}
           >
             <Ionicons name="bluetooth-off" size={20} color="#ff6b6b" />
             <Text style={styles.bluetoothAlertText}>
@@ -247,7 +299,7 @@ const CalibrationScreen = ({ navigation, route }) => {
               </Text>
               <TouchableOpacity 
                 style={styles.refreshButton}
-                onPress={checkPermissionsAndInitialize}
+                onPress={refreshDevices}
               >
                 <Text style={styles.refreshButtonText}>Refresh</Text>
               </TouchableOpacity>
@@ -283,6 +335,7 @@ const CalibrationScreen = ({ navigation, route }) => {
   );
 };
 
+// Keep the same styles as before
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,

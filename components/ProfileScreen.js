@@ -66,8 +66,9 @@ const ProfileScreen = ({ navigation }) => {
         },
         { 
           icon: 'mic-outline', 
-          text: 'Recording Preferences',
-          chevron: true
+          text: 'Recording Settings',
+          onPress: () => navigation.navigate('Test'),
+          badge: 'Required'
         }
       ]
     },

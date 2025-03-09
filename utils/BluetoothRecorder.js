@@ -1,9 +1,8 @@
-import { NativeModules, Platform, PermissionsAndroid } from 'react-native';
+import { Platform, PermissionsAndroid } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Permissions from 'expo-permissions';
-import BleManager from './BluetoothManager';
-
-const { BluetoothAudio } = NativeModules;
+import RNBluetoothClassic from 'react-native-bluetooth-classic';
+import { Audio } from 'expo-av';
 
 /**
  * Utility class for recording audio from Bluetooth devices
@@ -14,6 +13,7 @@ class BluetoothRecorder {
     this.outputFilePath = null;
     this.currentDeviceId = null;
     this.amplitudePollingInterval = null;
+    this.recording = null;
   }
 
   /**
@@ -76,18 +76,23 @@ class BluetoothRecorder {
       
       this.currentDeviceId = deviceId;
 
-      // If using a Bluetooth device, try to enable SCO
-      if (deviceId && deviceId.startsWith('bt_')) {
-        await BleManager.startBluetoothSco();
-      }
+      // Initialize the audio recording
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
+        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
 
-      // Start the recording
-      const started = await BluetoothAudio.startRecording(this.outputFilePath, deviceId);
+      // Create and prepare recording
+      this.recording = new Audio.Recording();
+      await this.recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
       
-      if (!started) {
-        return { error: 'Failed to start recording' };
-      }
-
+      // Start the recording
+      await this.recording.startAsync();
       this.isRecording = true;
 
       // Set up amplitude polling if callback provided
@@ -99,7 +104,9 @@ class BluetoothRecorder {
           }
 
           try {
-            const amplitude = await BluetoothAudio.getMaxAmplitude();
+            const status = await this.recording.getStatusAsync();
+            // Expo AV provides metering in dB, we can convert to amplitude percentage
+            const amplitude = status.metering ? Math.pow(10, status.metering / 20) * 100 : 0;
             onAmplitudeUpdate(amplitude);
           } catch (error) {
             console.error('Error getting amplitude:', error);
@@ -124,7 +131,7 @@ class BluetoothRecorder {
    * @returns {Promise<object>} Recording result object or error
    */
   async stopRecording() {
-    if (!this.isRecording) {
+    if (!this.isRecording || !this.recording) {
       return { error: 'Not recording' };
     }
 
@@ -136,13 +143,32 @@ class BluetoothRecorder {
       }
 
       // Stop the recording
-      const result = await BluetoothAudio.stopRecording();
-      this.isRecording = false;
-
-      // If using Bluetooth, stop SCO
-      if (this.currentDeviceId && this.currentDeviceId.startsWith('bt_')) {
-        await BleManager.stopBluetoothSco();
+      await this.recording.stopAndUnloadAsync();
+      
+      // Get the recording URI
+      const uri = this.recording.getURI();
+      
+      // Copy the file to our destination path if needed
+      if (uri !== this.outputFilePath) {
+        await FileSystem.copyAsync({
+          from: uri,
+          to: this.outputFilePath
+        });
       }
+      
+      this.isRecording = false;
+      this.recording = null;
+
+      // Reset audio mode
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
+        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
 
       // Get file info
       const fileInfo = await FileSystem.getInfoAsync(this.outputFilePath);
@@ -186,7 +212,15 @@ class BluetoothRecorder {
    */
   async getAvailableAudioSources() {
     try {
-      return await BleManager.getAvailableAudioSources();
+      // Get paired devices from react-native-bluetooth-classic
+      const devices = await RNBluetoothClassic.getBondedDevices();
+      
+      // Transform to match expected format
+      return devices.map(device => ({
+        id: device.address,
+        name: device.name || 'Unknown Device',
+        type: 'bluetooth'
+      }));
     } catch (error) {
       console.error('Error getting audio sources:', error);
       return [];
@@ -211,6 +245,7 @@ class BluetoothRecorder {
     this.isRecording = false;
     this.outputFilePath = null;
     this.currentDeviceId = null;
+    this.recording = null;
   }
 }
 

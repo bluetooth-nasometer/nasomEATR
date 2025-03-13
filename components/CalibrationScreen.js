@@ -50,10 +50,13 @@ const CalibrationScreen = ({ navigation, route }) => {
   useEffect(() => {
     checkPermissionsAndInitialize();
     
+    let stateSubscription = null;
+    
     // Set up Bluetooth state change listener
     const subscribeToBluetoothState = async () => {
       try {
-        RNBluetoothClassic.onStateChanged(handleBluetoothStateChange);
+        // Store the subscription reference for cleanup
+        stateSubscription = RNBluetoothClassic.onStateChanged(handleBluetoothStateChange);
       } catch (error) {
         console.error("Error setting up Bluetooth state listener:", error);
       }
@@ -63,8 +66,14 @@ const CalibrationScreen = ({ navigation, route }) => {
     
     // Clean up
     return () => {
-      // Remove listeners when component unmounts
-      RNBluetoothClassic.removeOnStateChangeListener();
+      try {
+        if (stateSubscription) {
+          // Properly remove the listener using the subscription reference
+          stateSubscription.remove();
+        }
+      } catch (error) {
+        console.error("Error removing Bluetooth state listener:", error);
+      }
     };
   }, []);
   

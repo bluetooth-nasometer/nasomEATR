@@ -1,12 +1,9 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Text, TouchableOpacity, Alert } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
+import { View, StyleSheet, ScrollView, Text, Alert } from 'react-native';
 import Colors from '../constants/Colors';
 import HeaderBar from './common/HeaderBar';
 import PatientFormFields from './common/PatientFormFields';
 import { supabase } from '../utils/supabaseClient';
-import uuid from 'react-native-uuid';
-import { Ionicons } from '@expo/vector-icons';
 import Button from './common/Button';
 
 const AddPatientScreen = ({ navigation }) => {
@@ -16,66 +13,14 @@ const AddPatientScreen = ({ navigation }) => {
   const [month, setMonth] = useState('');
   const [day, setDay] = useState('');
   const [mrn, setMrn] = useState('');
-  const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 1,
-    });
-
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
-    }
-  };
-
-  const uploadImage = async (uri) => {
-    try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      
-      // Generate a unique filename
-      const fileExt = uri.substring(uri.lastIndexOf('.') + 1);
-      const fileName = `${uuid.v4()}.${fileExt}`;
-      const filePath = `${fileName}`;
-
-      // Upload to Supabase storage
-      const { data, error: uploadError } = await supabase.storage
-        .from('patient_photos')
-        .upload(filePath, blob, {
-          contentType: `image/${fileExt}`
-        });
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('patient_photos')
-        .getPublicUrl(filePath);
-
-      return publicUrl;
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      throw error;
-    }
-  };
-
-  const checkMRNUnique = async (mrn) => {
-    const { data, error } = await supabase
-      .from('patient')
-      .select('mrn')
-      .eq('mrn', mrn)
-      .single();
-
-    if (error && error.code !== 'PGRST116') {
-      throw error;
-    }
-
-    return !data;
-  };
+  // Demographic fields
+  const [firstLanguage, setFirstLanguage] = useState('');
+  const [secondLanguage, setSecondLanguage] = useState('');
+  const [ethnicity, setEthnicity] = useState('');
+  const [race, setRace] = useState('');
+  const [country, setCountry] = useState('');
 
   const validateDate = (text, type) => {
     const num = parseInt(text);
@@ -111,32 +56,31 @@ const AddPatientScreen = ({ navigation }) => {
     try {
       setLoading(true);
 
-      // Get current clinician's ID
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error('No user logged in');
 
-      // Upload image if exists
-      let pictureUrl = null;
-      if (image) {
-        pictureUrl = await uploadImage(image);
-      }
-
-      // Create patient record
-      const { error: insertError } = await supabase
-        .from('patient')
-        .insert([{
+      const { error: insertError } = await supabase.from('patient').insert([
+        {
           mrn: parseInt(mrn),
           full_name: name,
           dob: `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`,
           gender: gender,
           assigned_clinician: user.id,
-          picture_url: pictureUrl
-        }]);
+          picture_url: null, // No image upload
+          first_language: firstLanguage || null,
+          second_language: secondLanguage || null,
+          ethnicity: ethnicity || null,
+          race: race || null,
+          country: country || null,
+        },
+      ]);
 
       if (insertError) throw insertError;
 
       Alert.alert('Success', 'Patient added successfully', [
-        { text: 'OK', onPress: () => navigation.goBack() }
+        { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (error) {
       Alert.alert('Error', error.message);
@@ -147,18 +91,17 @@ const AddPatientScreen = ({ navigation }) => {
 
   const calculateProgress = () => {
     let progress = 0;
-    if (name) progress += 20;
-    if (gender) progress += 20;
-    if (mrn) progress += 20;
-    if (year && month && day) progress += 20;
-    if (image) progress += 20;
+    if (name) progress += 25;
+    if (gender) progress += 25;
+    if (mrn) progress += 25;
+    if (year && month && day) progress += 25;
     return progress;
   };
 
   return (
     <View style={styles.container}>
-      <HeaderBar 
-        title="Add New Patient" 
+      <HeaderBar
+        title="Add New Patient"
         onBack={() => navigation.goBack()}
         rightComponent={
           <Button
@@ -171,23 +114,14 @@ const AddPatientScreen = ({ navigation }) => {
           />
         }
       />
-      
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Progress Indicator */}
+
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.progressContainer}>
           <Text style={styles.progressText}>
             {loading ? 'Saving...' : 'Fill in patient details'}
           </Text>
           <View style={styles.progressBar}>
-            <View 
-              style={[
-                styles.progressFill, 
-                { width: `${calculateProgress()}%` }
-              ]} 
-            />
+            <View style={[styles.progressFill, { width: `${calculateProgress()}%` }]} />
           </View>
         </View>
 
@@ -199,10 +133,18 @@ const AddPatientScreen = ({ navigation }) => {
             setGender={setGender}
             birthDate={{ month, day, year }}
             onDateChange={handleDateChange}
-            image={image}
-            onImagePick={pickImage}
             mrn={mrn}
             setMrn={setMrn}
+            firstLanguage={firstLanguage}
+            setFirstLanguage={setFirstLanguage}
+            secondLanguage={secondLanguage}
+            setSecondLanguage={setSecondLanguage}
+            ethnicity={ethnicity}
+            setEthnicity={setEthnicity}
+            race={race}
+            setRace={setRace}
+            country={country}
+            setCountry={setCountry}
           />
         </View>
 
@@ -243,7 +185,7 @@ const styles = StyleSheet.create({
     height: 10,
     backgroundColor: '#eee',
     borderRadius: 3,
-    marginTop: 10, // Added margin top instead of margin bottom
+    marginTop: 10,
     overflow: 'hidden',
   },
   progressFill: {

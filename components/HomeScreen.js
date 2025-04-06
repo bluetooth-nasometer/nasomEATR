@@ -50,6 +50,11 @@ const HomeScreen = ({ navigation }) => {
           gender,
           picture_url,
           notes,
+          first_language,
+          second_language,
+          ethnicity,
+          race,
+          country,
           patient_data(
             created_at
           )
@@ -68,7 +73,13 @@ const HomeScreen = ({ navigation }) => {
         dob: patient.dob,
         gender: patient.gender,
         picture_url: patient.picture_url,
-        notes: patient.notes  // Make sure notes are included
+        notes: patient.notes,
+        // Add the new demographic fields
+        first_language: patient.first_language,
+        second_language: patient.second_language,
+        ethnicity: patient.ethnicity,
+        race: patient.race,
+        country: patient.country
       }));
 
       setPatients(processedPatients);

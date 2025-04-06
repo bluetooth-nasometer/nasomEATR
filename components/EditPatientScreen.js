@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, Text, TouchableOpacity, Alert } from 'react-native';
 import Colors from '../constants/Colors';
 import { supabase } from '../utils/supabaseClient';
-import * as ImagePicker from 'expo-image-picker';
-import { decode } from 'base64-arraybuffer';
 import HeaderBar from './common/HeaderBar';
 import PatientFormFields from './common/PatientFormFields';
 import LoadingIndicator from './common/LoadingIndicator';
@@ -13,7 +11,6 @@ const EditPatientScreen = ({ route, navigation }) => {
   const [name, setName] = useState(patient.full_name);
   const [gender, setGender] = useState(patient.gender);
   const [mrn, setMrn] = useState(patient.mrn.toString());
-  const [image, setImage] = useState(patient.picture_url ? { uri: patient.picture_url } : null);
   const [loading, setLoading] = useState(false);
   const [birthDate, setBirthDate] = useState({
     year: new Date(patient.dob).getFullYear().toString(),
@@ -21,50 +18,15 @@ const EditPatientScreen = ({ route, navigation }) => {
     day: new Date(patient.dob).getDate().toString().padStart(2, '0')
   });
 
-  const handleImagePick = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-      base64: true,
-    });
-
-    if (!result.canceled) {
-      setImage({
-        uri: result.assets[0].uri,
-        base64: result.assets[0].base64,
-        isNew: true
-      });
-    }
-  };
+  // Demographic fields
+  const [firstLanguage, setFirstLanguage] = useState(patient.first_language || '');
+  const [secondLanguage, setSecondLanguage] = useState(patient.second_language || '');
+  const [ethnicity, setEthnicity] = useState(patient.ethnicity || '');
+  const [race, setRace] = useState(patient.race || '');
+  const [country, setCountry] = useState(patient.country || '');
 
   const handleDateChange = (text, type) => {
     validateDate(text, type);
-  };
-
-  const uploadNewImage = async () => {
-    if (!image?.isNew) return patient.picture_url;
-
-    const cleanName = name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-    const dateStr = new Date().toISOString().split('T')[0];
-    const fileName = `${cleanName}_${dateStr}.jpg`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('patient_photos')
-      .upload(fileName, decode(image.base64), {
-        contentType: 'image/jpeg',
-        cacheControl: '3600',
-        upsert: true
-      });
-
-    if (uploadError) throw uploadError;
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('patient_photos')
-      .getPublicUrl(fileName);
-
-    return publicUrl;
   };
 
   const validateDate = (text, type) => {
@@ -103,11 +65,6 @@ const EditPatientScreen = ({ route, navigation }) => {
     try {
       setLoading(true);
 
-      let pictureUrl = patient.picture_url;
-      if (image?.isNew) {
-        pictureUrl = await uploadNewImage();
-      }
-
       const dob = new Date(
         parseInt(birthDate.year),
         parseInt(birthDate.month) - 1,
@@ -120,8 +77,13 @@ const EditPatientScreen = ({ route, navigation }) => {
         .update({
           full_name: name,
           gender,
-          picture_url: pictureUrl,
+          picture_url: patient.picture_url, // Keep existing picture URL if any
           dob: dob,
+          first_language: firstLanguage || null,
+          second_language: secondLanguage || null,
+          ethnicity: ethnicity || null,
+          race: race || null,
+          country: country || null
         })
         .eq('mrn', patient.mrn);
 
@@ -166,11 +128,19 @@ const EditPatientScreen = ({ route, navigation }) => {
             setGender={setGender}
             birthDate={birthDate}
             onDateChange={handleDateChange}
-            image={image}
-            onImagePick={handleImagePick}
             mrn={mrn}
             mrnEditable={false}
             setMrn={setMrn}
+            firstLanguage={firstLanguage}
+            setFirstLanguage={setFirstLanguage}
+            secondLanguage={secondLanguage}
+            setSecondLanguage={setSecondLanguage}
+            ethnicity={ethnicity}
+            setEthnicity={setEthnicity}
+            race={race}
+            setRace={setRace}
+            country={country}
+            setCountry={setCountry}
           />
         </View>
       </ScrollView>
@@ -178,7 +148,7 @@ const EditPatientScreen = ({ route, navigation }) => {
   );
 };
 
-// Simplified styles since form field styles are now in PatientFormFields
+// Styles unchanged
 const styles = StyleSheet.create({
   container: {
     flex: 1,

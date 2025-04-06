@@ -214,6 +214,44 @@ const PatientDetailScreen = ({ route, navigation }) => {
     return unsubscribe;
   }, [navigation]);
 
+  // Add a demographic information section to display the new fields
+  const renderDemographicInfo = () => {
+    return (
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Demographic Information</Text>
+        </View>
+        
+        <View style={styles.infoGrid}>
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>First Language:</Text>
+            <Text style={styles.infoValue}>{patientData.first_language || 'N/A'}</Text>
+          </View>
+          
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>Second Language:</Text>
+            <Text style={styles.infoValue}>{patientData.second_language || 'N/A'}</Text>
+          </View>
+          
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>Ethnicity:</Text>
+            <Text style={styles.infoValue}>{patientData.ethnicity || 'N/A'}</Text>
+          </View>
+          
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>Race:</Text>
+            <Text style={styles.infoValue}>{patientData.race || 'N/A'}</Text>
+          </View>
+          
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>Country of Origin:</Text>
+            <Text style={styles.infoValue}>{patientData.country || 'N/A'}</Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -255,6 +293,9 @@ const PatientDetailScreen = ({ route, navigation }) => {
             <Text style={styles.statLabel}>Avg. Nasalance</Text>
           </View>
         </View>
+
+        {/* Add Demographic Info Section */}
+        {renderDemographicInfo()}
 
         {/* Graph Section */}
         <View style={styles.sectionCard}>
@@ -483,6 +524,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontStyle: 'italic',
+  },
+  infoGrid: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+    padding: 15,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  infoLabel: {
+    flex: 2,
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+  },
+  infoValue: {
+    flex: 3,
+    fontSize: 14,
+    color: Colors.lightNavalBlue,
   },
 });
 

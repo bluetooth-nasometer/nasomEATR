@@ -8,10 +8,12 @@ import {
   ScrollView,
   Alert,
   Animated,
-  Platform
+  Platform,
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av'; // Import Audio from expo-av
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import Colors from '../constants/Colors';
 import HeaderBar from './common/HeaderBar';
 import { supabase } from '../utils/supabaseClient';
@@ -46,6 +48,9 @@ const TestScreen = ({ navigation, route }) => {
   
   // Permission state
   const [hasPermission, setHasPermission] = useState(false);
+
+  // Add loading state
+  const [loading, setLoading] = useState(false);
 
   // Request microphone permissions when component mounts
   useEffect(() => {
@@ -312,6 +317,39 @@ const TestScreen = ({ navigation, route }) => {
     }
   };
   
+  // Upload audio file to Supabase Storage
+  const uploadAudioToStorage = async (uri, fileName) => {
+    try {
+      // Read the audio file as base64
+      const fileContent = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64
+      });
+      
+      // Upload to the patients_audio bucket
+      const { data, error } = await supabase
+        .storage
+        .from('patients_audio')
+        .upload(fileName, fileContent, {
+          contentType: 'audio/m4a',
+          upsert: true
+        });
+      
+      if (error) throw error;
+      
+      // Get the public URL
+      const { data: publicURLData } = supabase
+        .storage
+        .from('patients_audio')
+        .getPublicUrl(fileName);
+      
+      return publicURLData.publicUrl;
+    } catch (err) {
+      console.error('Error uploading audio file:', err);
+      throw err;
+    }
+  };
+  
+  // Modified save function to upload audio and save URLs
   const saveTestResults = async () => {
     try {
       if (!nasalRecording || !oralRecording) {
@@ -319,24 +357,41 @@ const TestScreen = ({ navigation, route }) => {
         return;
       }
       
-      const testDate = new Date().toISOString();
+      // Start loading state
+      setLoading(true);
       
-      // For a real app, you would analyze the recordings to calculate nasalance
-      // Here we'll use a random value between 20-60% for demonstration
+      const testDate = new Date().toISOString();
+      const timestamp = Date.now();
+      
+      // Create unique filenames for the audio files
+      const nasalFileName = `${patient.mrn}_nasal_${timestamp}.m4a`;
+      const oralFileName = `${patient.mrn}_oral_${timestamp}.m4a`;
+      
+      // Upload both recordings to storage
+      const nasalAudioUrl = await uploadAudioToStorage(nasalRecording.uri, nasalFileName);
+      const oralAudioUrl = await uploadAudioToStorage(oralRecording.uri, oralFileName);
+      
+      // Calculate mock nasalance score (in a real app, this would be from actual analysis)
       const nasalanceScore = Math.floor(Math.random() * 40) + 20;
       
+      // Prepare test data according to our database schema - changed patient_id to id
       const testData = {
-        id: testDate,
+        // Use a unique ID for this test record 
+        id: patient?.mrn,
         created_at: testDate,
-        duration: nasalRecording.duration + oralRecording.duration,
-        nasalance_score: nasalanceScore,
-        patient_id: patient?.mrn || 'unknown',
-        nasal_device: nasalMic?.name || 'Internal Microphone',
-        oral_device: oralMic?.name || 'Internal Microphone',
-        nasal_recording_uri: nasalRecording.uri,
-        oral_recording_uri: oralRecording.uri
+        avg_nasalance_score: nasalanceScore,
+        nasal_audio: nasalAudioUrl,
+        oral_audio: oralAudioUrl,
+        nasalance_data: JSON.stringify({
+          score: nasalanceScore,
+          nasal_device: nasalMic?.name || 'Internal Microphone',
+          oral_device: oralMic?.name || 'Internal Microphone',
+          duration: nasalRecording.duration + oralRecording.duration,
+          recording_date: testDate
+        })
       };
       
+      // Insert into the patient_data table
       const { error } = await supabase
         .from('patient_data')
         .insert(testData);
@@ -345,12 +400,14 @@ const TestScreen = ({ navigation, route }) => {
       
       Alert.alert(
         "Success",
-        "Test results saved successfully",
+        "Test results and audio recordings saved successfully",
         [{ text: "OK", onPress: () => navigation.navigate('PatientDetail', { patient }) }]
       );
     } catch (error) {
       console.error("Error saving test results:", error);
       Alert.alert("Error", "Failed to save test results. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
   
@@ -511,6 +568,7 @@ const TestScreen = ({ navigation, route }) => {
           <TouchableOpacity 
             style={styles.playButton}
             onPress={togglePlayNasal}
+            disabled={loading}
           >
             <Ionicons 
               name={isPlayingNasal ? "pause" : "play"} 
@@ -530,6 +588,7 @@ const TestScreen = ({ navigation, route }) => {
           <TouchableOpacity 
             style={styles.playButton}
             onPress={togglePlayOral}
+            disabled={loading}
           >
             <Ionicons 
               name={isPlayingOral ? "pause" : "play"} 
@@ -543,17 +602,28 @@ const TestScreen = ({ navigation, route }) => {
           <TouchableOpacity 
             style={styles.backButton}
             onPress={prevStep}
+            disabled={loading}
           >
             <Ionicons name="arrow-back" size={20} color={Colors.lightNavalBlue} />
             <Text style={styles.backButtonText}>Back</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={styles.saveButton}
+            style={[styles.saveButton, loading && styles.disabledButton]}
             onPress={saveTestResults}
+            disabled={loading}
           >
-            <Text style={styles.saveButtonText}>Save Results</Text>
-            <Ionicons name="save-outline" size={20} color="white" />
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="white" />
+                <Text style={[styles.saveButtonText, { marginLeft: 8 }]}>Saving...</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.saveButtonText}>Save Results</Text>
+                <Ionicons name="save-outline" size={20} color="white" />
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -831,6 +901,15 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     marginRight: 8,
+  },
+  disabledButton: {
+    backgroundColor: '#a5d6a7', // Lighter green
+    opacity: 0.8,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

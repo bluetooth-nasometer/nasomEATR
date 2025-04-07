@@ -252,6 +252,19 @@ const PatientDetailScreen = ({ route, navigation }) => {
     );
   };
 
+  const startNewTest = () => {
+    // Create mock device information since we're bypassing calibration
+    const mockNasalMic = { name: 'Mock Nasal Microphone', id: 'nasal-mock-id' };
+    const mockOralMic = { name: 'Mock Oral Microphone', id: 'oral-mock-id' };
+    
+    // Navigate directly to TestScreen with all required parameters
+    navigation.navigate('Test', { 
+      patient: patientData, 
+      nasalMic: mockNasalMic, 
+      oralMic: mockOralMic 
+    });
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -370,7 +383,7 @@ const PatientDetailScreen = ({ route, navigation }) => {
       <Button
         title="New Test"
         icon="add"
-        onPress={() => navigation.navigate('Calibration', { patient: patientData })}
+        onPress={startNewTest}
         style={styles.addButton}
         size="large"
       />

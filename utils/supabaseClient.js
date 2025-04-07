@@ -1,9 +1,9 @@
-import AsyncStorage from '@react-native-async-storage/async-storage'
-import { createClient } from '@supabase/supabase-js'
-import { SB_API_KEY } from '@env'
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createClient } from '@supabase/supabase-js';
+import { REACT_APP_SB_API_KEY } from '@env';
 
 const supabaseUrl = 'https://wlzjirbzkkfewwfybhim.supabase.co';
-const supabaseKey = SB_API_KEY;
+const supabaseKey = REACT_APP_SB_API_KEY;
 
 if (!supabaseKey) {
   console.error('Missing Supabase API key');

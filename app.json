@@ -61,23 +61,6 @@
           "photosPermission": "Allow nasomEATR to access your media library.",
           "savePhotosPermission": "Allow nasomEATR to save media to your library."
         }
-      ],
-      ["with-rn-bluetooth-classic",
-        {
-          "peripheralUsageDescription": "Allow nasomEATR to check bluetooth peripheral info",
-          "alwaysUsageDescription": "Allow nasomEATR to use bluetooth functionality",
-          "protocols": [
-            "com.jasperdoan.nasomEATR"
-          ]
-        }
-      ],
-      [
-        "react-native-ble-plx",
-        {
-          "isBackgroundEnabled": true,
-          "modes": ["peripheral", "central"],
-          "bluetoothAlwaysPermission": "Allow $(PRODUCT_NAME) to connect to bluetooth devices"
-        }
       ]
     ]
   }

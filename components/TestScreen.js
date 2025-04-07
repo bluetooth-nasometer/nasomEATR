@@ -330,7 +330,7 @@ const TestScreen = ({ navigation, route }) => {
         .storage
         .from('patients_audio')
         .upload(fileName, fileContent, {
-          contentType: 'audio/m4a',
+          contentType: 'audio/mp3',
           upsert: true
         });
       
@@ -364,8 +364,8 @@ const TestScreen = ({ navigation, route }) => {
       const timestamp = Date.now();
       
       // Create unique filenames for the audio files
-      const nasalFileName = `${patient.mrn}_nasal_${timestamp}.m4a`;
-      const oralFileName = `${patient.mrn}_oral_${timestamp}.m4a`;
+      const nasalFileName = `${patient.mrn}_nasal_${timestamp}.mp3`;
+      const oralFileName = `${patient.mrn}_oral_${timestamp}.mp3`;
       
       // Upload both recordings to storage
       const nasalAudioUrl = await uploadAudioToStorage(nasalRecording.uri, nasalFileName);
@@ -374,10 +374,13 @@ const TestScreen = ({ navigation, route }) => {
       // Calculate mock nasalance score (in a real app, this would be from actual analysis)
       const nasalanceScore = Math.floor(Math.random() * 40) + 20;
       
-      // Prepare test data according to our database schema - changed patient_id to id
+      // if for testData should be patient.mrn (as first few digits) concatenate with timestamp (final should be an integer)
+      const testDataId = parseInt(`${patient.mrn}${timestamp}`);
+
       const testData = {
-        // Use a unique ID for this test record 
-        id: patient?.mrn,
+        
+        id: testDataId,
+        mrn: patient?.mrn,
         created_at: testDate,
         avg_nasalance_score: nasalanceScore,
         nasal_audio: nasalAudioUrl,

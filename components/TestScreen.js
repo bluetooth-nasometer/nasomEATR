@@ -7,9 +7,11 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
-  Animated
+  Animated,
+  Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Audio } from 'expo-av'; // Import Audio from expo-av
 import Colors from '../constants/Colors';
 import HeaderBar from './common/HeaderBar';
 import { supabase } from '../utils/supabaseClient';
@@ -18,7 +20,7 @@ const TestScreen = ({ navigation, route }) => {
   const { nasalMic, oralMic, patient } = route.params || {};
   
   // Step management
-  const [currentStep, setCurrentStep] = useState(0); // 0: nasal, 1: oral, 2: review
+  const [currentStep, setCurrentStep] = useState(0);
   const steps = ['Nasal Recording', 'Oral Recording', 'Review'];
   
   // Recording state management
@@ -26,16 +28,44 @@ const TestScreen = ({ navigation, route }) => {
   const [timer, setTimer] = useState(0);
   const [timerInterval, setTimerInterval] = useState(null);
   
+  // Audio recording objects
+  const [audioRecording, setAudioRecording] = useState(null);
+  
   // Audio data storage
   const [nasalRecording, setNasalRecording] = useState(null);
   const [oralRecording, setOralRecording] = useState(null);
   
-  // Playback states
+  // Playback states and objects
+  const [nasalSound, setNasalSound] = useState(null);
+  const [oralSound, setOralSound] = useState(null);
   const [isPlayingNasal, setIsPlayingNasal] = useState(false);
   const [isPlayingOral, setIsPlayingOral] = useState(false);
   
   // Animation value for recording indicator
   const [pulseAnim] = useState(new Animated.Value(1));
+  
+  // Permission state
+  const [hasPermission, setHasPermission] = useState(false);
+
+  // Request microphone permissions when component mounts
+  useEffect(() => {
+    (async () => {
+      await requestMicrophonePermission();
+    })();
+    
+    return () => {
+      // Clean up recordings and sounds when component unmounts
+      if (audioRecording) {
+        audioRecording.stopAndUnloadAsync();
+      }
+      if (nasalSound) {
+        nasalSound.unloadAsync();
+      }
+      if (oralSound) {
+        oralSound.unloadAsync();
+      }
+    };
+  }, []);
 
   // Setup pulse animation
   useEffect(() => {
@@ -80,6 +110,34 @@ const TestScreen = ({ navigation, route }) => {
     };
   }, [recording]);
 
+  // Request microphone permission
+  const requestMicrophonePermission = async () => {
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      setHasPermission(status === 'granted');
+      
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'Microphone access is required for recording audio.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        // Initialize Audio session for recording
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to get microphone permission', err);
+      Alert.alert('Error', 'Failed to access microphone');
+    }
+  };
+
   const handleBackPress = () => {
     if (recording || nasalRecording || oralRecording) {
       Alert.alert(
@@ -95,32 +153,142 @@ const TestScreen = ({ navigation, route }) => {
     }
   };
   
-  const startRecording = () => {
-    setTimer(0);
-    setRecording(true);
+  // Start recording function with real audio recording
+  const startRecording = async () => {
+    if (!hasPermission) {
+      await requestMicrophonePermission();
+      if (!hasPermission) return;
+    }
     
-    // Simulate recording for demo
-    // In a real app, you'd use audio recording API here
+    try {
+      setTimer(0);
+      
+      // Create a new Audio Recording
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.startAsync();
+      
+      setAudioRecording(recording);
+      setRecording(true);
+    } catch (err) {
+      console.error('Failed to start recording', err);
+      Alert.alert('Error', 'Failed to start recording');
+    }
   };
   
-  const stopRecording = () => {
-    setRecording(false);
-    
-    // Save the recording data based on current step
-    if (currentStep === 0) {
-      setNasalRecording({
-        duration: timer,
-        timestamp: new Date().toISOString(),
-        // In a real app, this would be the actual audio file path/data
-        audioData: `nasal-recording-${Date.now()}`
-      });
-    } else if (currentStep === 1) {
-      setOralRecording({
-        duration: timer,
-        timestamp: new Date().toISOString(),
-        // In a real app, this would be the actual audio file path/data
-        audioData: `oral-recording-${Date.now()}`
-      });
+  // Stop recording with real audio
+  const stopRecording = async () => {
+    try {
+      if (!audioRecording) return;
+      
+      setRecording(false);
+      
+      // Stop the recording
+      await audioRecording.stopAndUnloadAsync();
+      
+      // Get the recording URI
+      const uri = audioRecording.getURI();
+      
+      // Save the recording data based on current step
+      if (currentStep === 0) {
+        setNasalRecording({
+          duration: timer,
+          timestamp: new Date().toISOString(),
+          uri: uri
+        });
+      } else if (currentStep === 1) {
+        setOralRecording({
+          duration: timer,
+          timestamp: new Date().toISOString(),
+          uri: uri
+        });
+      }
+      
+      // Reset the recording object
+      setAudioRecording(null);
+    } catch (err) {
+      console.error('Failed to stop recording', err);
+      Alert.alert('Error', 'Failed to save recording');
+      setAudioRecording(null);
+      setRecording(false);
+    }
+  };
+  
+  // Play nasal recording
+  const togglePlayNasal = async () => {
+    if (isPlayingNasal) {
+      // Stop playback
+      if (nasalSound) {
+        await nasalSound.stopAsync();
+        setIsPlayingNasal(false);
+      }
+    } else {
+      try {
+        // If sound isn't loaded yet, load it
+        let sound = nasalSound;
+        if (!sound) {
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: nasalRecording.uri },
+            { shouldPlay: true }
+          );
+          sound = newSound;
+          setNasalSound(sound);
+        } else {
+          // Otherwise just play it
+          await sound.playFromPositionAsync(0);
+        }
+        
+        setIsPlayingNasal(true);
+        
+        // When sound finishes playing
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (status.didJustFinish) {
+            setIsPlayingNasal(false);
+          }
+        });
+      } catch (err) {
+        console.error('Failed to play nasal recording', err);
+        Alert.alert('Error', 'Failed to play recording');
+      }
+    }
+  };
+  
+  // Play oral recording
+  const togglePlayOral = async () => {
+    if (isPlayingOral) {
+      // Stop playback
+      if (oralSound) {
+        await oralSound.stopAsync();
+        setIsPlayingOral(false);
+      }
+    } else {
+      try {
+        // If sound isn't loaded yet, load it
+        let sound = oralSound;
+        if (!sound) {
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: oralRecording.uri },
+            { shouldPlay: true }
+          );
+          sound = newSound;
+          setOralSound(sound);
+        } else {
+          // Otherwise just play it
+          await sound.playFromPositionAsync(0);
+        }
+        
+        setIsPlayingOral(true);
+        
+        // When sound finishes playing
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (status.didJustFinish) {
+            setIsPlayingOral(false);
+          }
+        });
+      } catch (err) {
+        console.error('Failed to play oral recording', err);
+        Alert.alert('Error', 'Failed to play recording');
+      }
     }
   };
   
@@ -144,26 +312,6 @@ const TestScreen = ({ navigation, route }) => {
     }
   };
   
-  const togglePlayNasal = () => {
-    setIsPlayingNasal(!isPlayingNasal);
-    
-    // In a real app, implement actual audio playback
-    if (!isPlayingNasal) {
-      // Start playback
-      setTimeout(() => setIsPlayingNasal(false), nasalRecording.duration * 1000);
-    }
-  };
-  
-  const togglePlayOral = () => {
-    setIsPlayingOral(!isPlayingOral);
-    
-    // In a real app, implement actual audio playback
-    if (!isPlayingOral) {
-      // Start playback
-      setTimeout(() => setIsPlayingOral(false), oralRecording.duration * 1000);
-    }
-  };
-  
   const saveTestResults = async () => {
     try {
       if (!nasalRecording || !oralRecording) {
@@ -173,7 +321,8 @@ const TestScreen = ({ navigation, route }) => {
       
       const testDate = new Date().toISOString();
       
-      // Calculate mock nasalance score (in a real app this would be from actual analysis)
+      // For a real app, you would analyze the recordings to calculate nasalance
+      // Here we'll use a random value between 20-60% for demonstration
       const nasalanceScore = Math.floor(Math.random() * 40) + 20;
       
       const testData = {
@@ -182,8 +331,10 @@ const TestScreen = ({ navigation, route }) => {
         duration: nasalRecording.duration + oralRecording.duration,
         nasalance_score: nasalanceScore,
         patient_id: patient?.mrn || 'unknown',
-        nasal_device: nasalMic?.name || 'mock-nasal',
-        oral_device: oralMic?.name || 'mock-oral'
+        nasal_device: nasalMic?.name || 'Internal Microphone',
+        oral_device: oralMic?.name || 'Internal Microphone',
+        nasal_recording_uri: nasalRecording.uri,
+        oral_recording_uri: oralRecording.uri
       };
       
       const { error } = await supabase
@@ -431,7 +582,7 @@ const TestScreen = ({ navigation, route }) => {
       
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         {/* Patient info */}
-        <Text style={styles.patientName}>{patient?.name || 'Unknown Patient'}</Text>
+        <Text style={styles.patientName}>{patient?.full_name || 'Unknown Patient'}</Text>
         <Text style={styles.patientDetail}>MRN: {patient?.mrn || 'N/A'}</Text>
         
         {renderStepIndicator()}

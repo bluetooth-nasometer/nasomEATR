@@ -16,7 +16,8 @@ import HeaderBar from './common/HeaderBar';
 import PatientCard from './common/PatientCard';
 import LoadingIndicator from './common/LoadingIndicator';
 
-const HomeScreen = ({ navigation }) => {
+// HomeScreen -> PatientListScreen
+const PatientListScreen = ({ navigation }) => {
   const [patients, setPatients] = useState([]);
   const [filteredPatients, setFilteredPatients] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -350,4 +351,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export default HomeScreen;
+// HomeScreen -> PatientListScreen
+export default PatientListScreen;

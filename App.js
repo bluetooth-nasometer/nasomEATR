@@ -6,7 +6,8 @@ import { AppState, Platform } from 'react-native';
 import LoginScreen from './components/LoginScreen';
 import SignupScreen from './components/SignupScreen';
 import DashboardPage from './components/DashboardPage';
-import HomeScreen from './components/HomeScreen';
+// HomeScreen -> PatientListScreen
+import PatientListScreen from './components/PatientListScreen';
 import SessionsScreen from './components/SessionsScreen';
 import ProfileScreen from './components/ProfileScreen';
 import AddPatientScreen from './components/AddPatientScreen';
@@ -29,7 +30,7 @@ export default function App() {
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Signup" component={SignupScreen} />
           <Stack.Screen name="Dashboard" component={DashboardPage} />
-          <Stack.Screen name="HomeTab" component={HomeScreen} />
+          <Stack.Screen name="HomeTab" component={PatientListScreen} />
           <Stack.Screen name="Sessions" component={SessionsScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
           <Stack.Screen name="AddPatient" component={AddPatientScreen} />

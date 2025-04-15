@@ -27,21 +27,11 @@
         "backgroundColor": "#ffffff"
       },
       "permissions": [
+        "CAMERA",
         "RECORD_AUDIO",
-        "WRITE_EXTERNAL_STORAGE",
         "READ_EXTERNAL_STORAGE",
-        "MEDIA_LIBRARY",
-        "MEDIA_LIBRARY_WRITE_ONLY",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.BLUETOOTH",
-        "android.permission.BLUETOOTH_ADMIN",
-        "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.BLUETOOTH_SCAN",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION"
+        "WRITE_EXTERNAL_STORAGE",
+        "MEDIA_LIBRARY"
       ],
       "package": "com.jasperdoan.nasomEATR"
     },
@@ -58,8 +48,9 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "Allow nasomEATR to access your media library.",
-          "savePhotosPermission": "Allow nasomEATR to save media to your library."
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos",
+          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save photos",
+          "isAccessMediaLocationEnabled": true
         }
       ]
     ]

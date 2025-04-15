@@ -67,7 +67,7 @@ const TestDetailScreen = ({ route, navigation }) => {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  // Play nasal recording
+  // Play nasal recording with improved error handling
   const togglePlayNasal = async () => {
     try {
       if (isPlayingNasal && nasalSound) {
@@ -78,34 +78,55 @@ const TestDetailScreen = ({ route, navigation }) => {
       
       setIsLoading(true);
       
+      // Log the audio URL for debugging
+      console.log('Attempting to play nasal audio from:', test.nasal_audio);
+      
       // If sound isn't loaded yet or failed before, load it
       if (!nasalSound) {
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: test.nasal_audio },
-          { shouldPlay: true }
-        );
-        setNasalSound(newSound);
-        
-        newSound.setOnPlaybackStatusUpdate((status) => {
-          if (status.didJustFinish) {
-            setIsPlayingNasal(false);
-          }
-        });
+        try {
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: test.nasal_audio },
+            { shouldPlay: true },
+            (status) => {
+              console.log('Nasal playback status:', status);
+              if (status.didJustFinish) {
+                setIsPlayingNasal(false);
+              }
+              if (status.error) {
+                console.error('Playback error:', status.error);
+                Alert.alert('Playback Error', `Error playing recording: ${status.error}`);
+                setIsPlayingNasal(false);
+              }
+            }
+          );
+          
+          setNasalSound(newSound);
+          setIsPlayingNasal(true);
+        } catch (loadError) {
+          console.error('Failed to load nasal recording:', loadError);
+          console.log('Audio URL that failed:', test.nasal_audio);
+          
+          Alert.alert(
+            'Error', 
+            `Failed to play recording. The audio file may be corrupted or in an unsupported format. Error: ${loadError.message}`
+          );
+          setIsPlayingNasal(false);
+        }
       } else {
         // Otherwise just play it
         await nasalSound.playFromPositionAsync(0);
+        setIsPlayingNasal(true);
       }
-      
-      setIsPlayingNasal(true);
     } catch (err) {
       console.error('Failed to play nasal recording:', err);
-      Alert.alert('Error', 'Failed to play recording. Please try again.');
+      Alert.alert('Error', `Failed to play recording: ${err.message}`);
+      setIsPlayingNasal(false);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Play oral recording
+  // Play oral recording with improved error handling
   const togglePlayOral = async () => {
     try {
       if (isPlayingOral && oralSound) {
@@ -116,28 +137,49 @@ const TestDetailScreen = ({ route, navigation }) => {
       
       setIsLoading(true);
       
+      // Log the audio URL for debugging
+      console.log('Attempting to play oral audio from:', test.oral_audio);
+      
       // If sound isn't loaded yet or failed before, load it
       if (!oralSound) {
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri: test.oral_audio },
-          { shouldPlay: true }
-        );
-        setOralSound(newSound);
-        
-        newSound.setOnPlaybackStatusUpdate((status) => {
-          if (status.didJustFinish) {
-            setIsPlayingOral(false);
-          }
-        });
+        try {
+          const { sound: newSound } = await Audio.Sound.createAsync(
+            { uri: test.oral_audio },
+            { shouldPlay: true },
+            (status) => {
+              console.log('Oral playback status:', status);
+              if (status.didJustFinish) {
+                setIsPlayingOral(false);
+              }
+              if (status.error) {
+                console.error('Playback error:', status.error);
+                Alert.alert('Playback Error', `Error playing recording: ${status.error}`);
+                setIsPlayingOral(false);
+              }
+            }
+          );
+          
+          setOralSound(newSound);
+          setIsPlayingOral(true);
+        } catch (loadError) {
+          console.error('Failed to load oral recording:', loadError);
+          console.log('Audio URL that failed:', test.oral_audio);
+          
+          Alert.alert(
+            'Error', 
+            `Failed to play recording. The audio file may be corrupted or in an unsupported format. Error: ${loadError.message}`
+          );
+          setIsPlayingOral(false);
+        }
       } else {
         // Otherwise just play it
         await oralSound.playFromPositionAsync(0);
+        setIsPlayingOral(true);
       }
-      
-      setIsPlayingOral(true);
     } catch (err) {
       console.error('Failed to play oral recording:', err);
-      Alert.alert('Error', 'Failed to play recording. Please try again.');
+      Alert.alert('Error', `Failed to play recording: ${err.message}`);
+      setIsPlayingOral(false);
     } finally {
       setIsLoading(false);
     }

@@ -9,11 +9,14 @@ import {
   Alert,
   Animated,
   Platform,
-  ActivityIndicator
+  ActivityIndicator,
+  ToastAndroid,
+  PermissionsAndroid
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
 import Colors from '../constants/Colors';
 import HeaderBar from './common/HeaderBar';
 import { supabase } from '../utils/supabaseClient';
@@ -143,6 +146,46 @@ const TestScreen = ({ navigation, route }) => {
     }
   };
 
+  const saveToAppStorage = async (uri, fileName) => {
+    try {
+      console.log(`Saving ${fileName} to app storage from ${uri}`);
+      
+      // Create a path in the app's internal storage
+      const destinationUri = `${FileSystem.documentDirectory}${fileName}`;
+      
+      // Copy the file to our app's document directory which we have full access to
+      await FileSystem.copyAsync({
+        from: uri,
+        to: destinationUri
+      });
+      
+      console.log(`File saved to app storage: ${destinationUri}`);
+      
+      if (Platform.OS === 'android') {
+        ToastAndroid.show(`Recording saved`, ToastAndroid.SHORT);
+      }
+      
+      return destinationUri;
+    } catch (error) {
+      console.error('Error saving file to app storage:', error);
+      Alert.alert('Save Error', `Failed to save recording: ${error.message}`);
+      return uri; // Return original URI as fallback
+    }
+  };
+
+  const deleteAppStorageFile = async (uri) => {
+    try {
+      if (!uri || !uri.startsWith(FileSystem.documentDirectory)) return false;
+      
+      await FileSystem.deleteAsync(uri, { idempotent: true });
+      console.log(`Successfully deleted file from app storage: ${uri}`);
+      return true;
+    } catch (error) {
+      console.error(`Error deleting file ${uri}:`, error);
+      return false;
+    }
+  };
+
   const handleBackPress = () => {
     if (recording || nasalRecording || oralRecording) {
       Alert.alert(
@@ -158,7 +201,6 @@ const TestScreen = ({ navigation, route }) => {
     }
   };
   
-  // Start recording function with real audio recording
   const startRecording = async () => {
     if (!hasPermission) {
       await requestMicrophonePermission();
@@ -168,68 +210,110 @@ const TestScreen = ({ navigation, route }) => {
     try {
       setTimer(0);
       
-      // Create a new Audio Recording
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+      
       const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      
+      await recording.prepareToRecordAsync({
+        android: {
+          extension: '.mp3',
+          outputFormat: Audio.RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4,
+          audioEncoder: Audio.RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC,
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.m4a',
+          audioQuality: Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_MAX,
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+        web: {
+          mimeType: 'audio/webm',
+          bitsPerSecond: 128000,
+        }
+      });
+      
       await recording.startAsync();
       
       setAudioRecording(recording);
       setRecording(true);
     } catch (err) {
       console.error('Failed to start recording', err);
-      Alert.alert('Error', 'Failed to start recording');
+      Alert.alert('Error', 'Failed to start recording: ' + err.message);
     }
   };
   
-  // Stop recording with real audio
   const stopRecording = async () => {
     try {
       if (!audioRecording) return;
       
       setRecording(false);
       
-      // Stop the recording
       await audioRecording.stopAndUnloadAsync();
       
-      // Get the recording URI
       const uri = audioRecording.getURI();
+      console.log(`Recording stopped. URI: ${uri}`);
       
-      // Save the recording data based on current step
+      const timestamp = Date.now();
+      let localPath = null;
+      
       if (currentStep === 0) {
+        const fileName = `nasal_recording_${timestamp}.mp3`;
+        
+        // Use app storage instead of downloads
+        localPath = await saveToAppStorage(uri, fileName);
+        console.log('Nasal recording saved locally at:', localPath);
+        
         setNasalRecording({
           duration: timer,
           timestamp: new Date().toISOString(),
-          uri: uri
+          uri: uri,
+          localPath: localPath || uri
         });
       } else if (currentStep === 1) {
+        const fileName = `oral_recording_${timestamp}.mp3`;
+        
+        // Use app storage instead of downloads
+        localPath = await saveToAppStorage(uri, fileName);
+        console.log('Oral recording saved locally at:', localPath);
+        
         setOralRecording({
           duration: timer,
           timestamp: new Date().toISOString(),
-          uri: uri
+          uri: uri,
+          localPath: localPath || uri
         });
       }
       
-      // Reset the recording object
       setAudioRecording(null);
     } catch (err) {
       console.error('Failed to stop recording', err);
-      Alert.alert('Error', 'Failed to save recording');
+      Alert.alert('Error', 'Failed to save recording: ' + err.message);
       setAudioRecording(null);
       setRecording(false);
     }
   };
   
-  // Play nasal recording
   const togglePlayNasal = async () => {
     if (isPlayingNasal) {
-      // Stop playback
       if (nasalSound) {
         await nasalSound.stopAsync();
         setIsPlayingNasal(false);
       }
     } else {
       try {
-        // If sound isn't loaded yet, load it
         let sound = nasalSound;
         if (!sound) {
           const { sound: newSound } = await Audio.Sound.createAsync(
@@ -239,13 +323,11 @@ const TestScreen = ({ navigation, route }) => {
           sound = newSound;
           setNasalSound(sound);
         } else {
-          // Otherwise just play it
           await sound.playFromPositionAsync(0);
         }
         
         setIsPlayingNasal(true);
         
-        // When sound finishes playing
         sound.setOnPlaybackStatusUpdate((status) => {
           if (status.didJustFinish) {
             setIsPlayingNasal(false);
@@ -258,17 +340,14 @@ const TestScreen = ({ navigation, route }) => {
     }
   };
   
-  // Play oral recording
   const togglePlayOral = async () => {
     if (isPlayingOral) {
-      // Stop playback
       if (oralSound) {
         await oralSound.stopAsync();
         setIsPlayingOral(false);
       }
     } else {
       try {
-        // If sound isn't loaded yet, load it
         let sound = oralSound;
         if (!sound) {
           const { sound: newSound } = await Audio.Sound.createAsync(
@@ -278,13 +357,11 @@ const TestScreen = ({ navigation, route }) => {
           sound = newSound;
           setOralSound(sound);
         } else {
-          // Otherwise just play it
           await sound.playFromPositionAsync(0);
         }
         
         setIsPlayingOral(true);
         
-        // When sound finishes playing
         sound.setOnPlaybackStatusUpdate((status) => {
           if (status.didJustFinish) {
             setIsPlayingOral(false);
@@ -317,13 +394,24 @@ const TestScreen = ({ navigation, route }) => {
     }
   };
   
-  // Upload audio file to Supabase Storage - revised to avoid network errors
   const uploadAudioToStorage = async (uri, fileName) => {
     try {
       console.log(`Starting upload for ${fileName} from ${uri}`);
       
-      // Read the file as base64 - this is more reliable than fetch/blob in React Native
-      const fileBase64 = await FileSystem.readAsStringAsync(uri, {
+      // Ensure we're using an internal URI that we have permission to read
+      let fileUri = uri;
+      if (!uri.startsWith(FileSystem.documentDirectory) && !uri.startsWith('file:///data/')) {
+        console.log('URI is not from app storage, attempting to create a local copy...');
+        fileUri = `${FileSystem.documentDirectory}temp_${fileName}`;
+        await FileSystem.copyAsync({
+          from: uri,
+          to: fileUri
+        });
+        console.log(`Created local copy at: ${fileUri}`);
+      }
+      
+      // Now read from our accessible path
+      const fileBase64 = await FileSystem.readAsStringAsync(fileUri, {
         encoding: FileSystem.EncodingType.Base64
       });
       
@@ -333,12 +421,16 @@ const TestScreen = ({ navigation, route }) => {
       
       console.log(`File read successfully: ${fileName}, length: ${fileBase64.length}`);
       
-      // Upload as base64 string
+      // Clean up temp file if we created one
+      if (fileUri !== uri) {
+        await FileSystem.deleteAsync(fileUri, { idempotent: true });
+      }
+      
       const { data, error } = await supabase
         .storage
         .from('patients_audio')
         .upload(fileName, fileBase64, {
-          contentType: 'audio/mpeg', // Set proper content type
+          contentType: 'audio/mpeg',
           upsert: true
         });
       
@@ -346,7 +438,6 @@ const TestScreen = ({ navigation, route }) => {
       
       console.log(`Upload successful for ${fileName}`);
       
-      // Get the public URL
       const { data: publicURLData } = supabase
         .storage
         .from('patients_audio')
@@ -365,7 +456,6 @@ const TestScreen = ({ navigation, route }) => {
     }
   };
   
-  // Modified save function with improved error handling and exponential backoff retry
   const saveTestResults = async () => {
     try {
       if (!nasalRecording || !oralRecording) {
@@ -373,28 +463,29 @@ const TestScreen = ({ navigation, route }) => {
         return;
       }
       
-      // Start loading state
       setLoading(true);
       
       const testDate = new Date().toISOString();
       const timestamp = Date.now();
       
-      // Create unique filenames for the audio files
+      console.log('Nasal recording local path:', nasalRecording.localPath || 'Not available');
+      console.log('Oral recording local path:', oralRecording.localPath || 'Not available');
+      
       const nasalFileName = `${patient.mrn}_nasal_${timestamp}.mp3`;
       const oralFileName = `${patient.mrn}_oral_${timestamp}.mp3`;
       
       console.log('Starting uploads to Supabase...');
       
-      // Upload both recordings to storage with exponential backoff retry
       let nasalAudioUrl, oralAudioUrl;
+      let nasalLocalPath = nasalRecording.localPath;
+      let oralLocalPath = oralRecording.localPath;
       
       const uploadWithRetry = async (uri, fileName, attempt = 1, maxAttempts = 3) => {
         try {
           return await uploadAudioToStorage(uri, fileName);
         } catch (error) {
           if (attempt < maxAttempts) {
-            // Exponential backoff: wait longer between each retry
-            const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s...
+            const delay = Math.pow(2, attempt) * 1000;
             console.log(`Upload failed. Retrying in ${delay/1000}s (${attempt}/${maxAttempts-1})...`);
             await new Promise(resolve => setTimeout(resolve, delay));
             return uploadWithRetry(uri, fileName, attempt + 1, maxAttempts);
@@ -406,7 +497,8 @@ const TestScreen = ({ navigation, route }) => {
       // First upload nasal recording
       try {
         console.log('Uploading nasal recording...');
-        nasalAudioUrl = await uploadWithRetry(nasalRecording.uri, nasalFileName);
+        const sourceUri = nasalLocalPath || nasalRecording.uri;
+        nasalAudioUrl = await uploadWithRetry(sourceUri, nasalFileName);
         console.log('Nasal recording uploaded successfully');
       } catch (uploadError) {
         console.error('Failed to upload nasal recording:', uploadError);
@@ -416,7 +508,8 @@ const TestScreen = ({ navigation, route }) => {
       // Then upload oral recording
       try {
         console.log('Uploading oral recording...');
-        oralAudioUrl = await uploadWithRetry(oralRecording.uri, oralFileName);
+        const sourceUri = oralLocalPath || oralRecording.uri;
+        oralAudioUrl = await uploadWithRetry(sourceUri, oralFileName);
         console.log('Oral recording uploaded successfully');
       } catch (uploadError) {
         console.error('Failed to upload oral recording:', uploadError);
@@ -426,12 +519,16 @@ const TestScreen = ({ navigation, route }) => {
       // Calculate mock nasalance score (in a real app, this would be from actual analysis)
       const nasalanceScore = Math.floor(Math.random() * 40) + 20;
       
-      // Generate a unique ID that's safer (avoiding integer overflow)
-      const testDataId = `${patient.mrn}${timestamp}`.substring(0, 10);
+      // Generate a truly unique ID using time-based approach
+      // Use UUID pattern for more uniqueness
+      const randomPart = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+      const testDataId = parseInt(`${timestamp}${randomPart}`.substring(0, 10));
       console.log(`Generated test ID: ${testDataId}`);
 
+      // If we're still concerned about uniqueness, we can simply omit the ID entirely
+      // and let Supabase generate one for us with its auto-incrementing ID feature
       const testData = {
-        id: parseInt(testDataId), // Convert to integer
+        // id: testDataId, // Let Supabase generate this automatically
         mrn: patient?.mrn,
         created_at: testDate,
         avg_nasalance_score: nasalanceScore,
@@ -448,21 +545,44 @@ const TestScreen = ({ navigation, route }) => {
       
       console.log('Saving test data to database...');
       
-      // Insert into the patient_data table
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('patient_data')
-        .insert(testData);
+        .insert(testData)
+        .select();  // Get the inserted record with auto-generated ID
       
       if (error) {
         console.error('Database insert error:', error);
-        throw error;
+        
+        // Handle specific database errors
+        if (error.code === '23505') {
+          throw new Error('Unable to save test: duplicate record. Please try again.');
+        } else {
+          throw error;
+        }
       }
       
-      console.log('Test results saved successfully');
+      console.log('Test results saved successfully', data);
+      
+      // Now that everything is saved, delete the local files
+      let deletedNasal = false, deletedOral = false;
+      
+      if (nasalLocalPath && nasalLocalPath.startsWith(FileSystem.documentDirectory)) {
+        deletedNasal = await deleteAppStorageFile(nasalLocalPath);
+        console.log(deletedNasal ? 'Deleted nasal recording file' : 'Failed to delete nasal recording file');
+      }
+      
+      if (oralLocalPath && oralLocalPath.startsWith(FileSystem.documentDirectory)) {
+        deletedOral = await deleteAppStorageFile(oralLocalPath);
+        console.log(deletedOral ? 'Deleted oral recording file' : 'Failed to delete oral recording file');
+      }
+      
+      const deletionMessage = deletedNasal && deletedOral ? 
+        'Local files deleted after upload.' : 
+        'Note: Some local files could not be deleted.';
       
       Alert.alert(
         "Success",
-        "Test results and audio recordings saved successfully",
+        `Test results and audio recordings saved successfully. ${deletionMessage}`,
         [{ text: "OK", onPress: () => navigation.navigate('PatientDetail', { patient }) }]
       );
     } catch (error) {
@@ -969,7 +1089,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   disabledButton: {
-    backgroundColor: '#a5d6a7', // Lighter green
+    backgroundColor: '#a5d6a7',
     opacity: 0.8,
   },
   loadingContainer: {

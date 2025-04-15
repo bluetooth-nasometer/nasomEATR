@@ -317,24 +317,34 @@ const TestScreen = ({ navigation, route }) => {
     }
   };
   
-  // Upload audio file to Supabase Storage
+  // Upload audio file to Supabase Storage - revised to avoid network errors
   const uploadAudioToStorage = async (uri, fileName) => {
     try {
-      // Read the audio file as base64
-      const fileContent = await FileSystem.readAsStringAsync(uri, {
+      console.log(`Starting upload for ${fileName} from ${uri}`);
+      
+      // Read the file as base64 - this is more reliable than fetch/blob in React Native
+      const fileBase64 = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64
       });
       
-      // Upload to the patients_audio bucket
+      if (!fileBase64) {
+        throw new Error('Failed to read audio file');
+      }
+      
+      console.log(`File read successfully: ${fileName}, length: ${fileBase64.length}`);
+      
+      // Upload as base64 string
       const { data, error } = await supabase
         .storage
         .from('patients_audio')
-        .upload(fileName, fileContent, {
-          contentType: 'audio/mp3',
+        .upload(fileName, fileBase64, {
+          contentType: 'audio/mpeg', // Set proper content type
           upsert: true
         });
       
       if (error) throw error;
+      
+      console.log(`Upload successful for ${fileName}`);
       
       // Get the public URL
       const { data: publicURLData } = supabase
@@ -342,14 +352,20 @@ const TestScreen = ({ navigation, route }) => {
         .from('patients_audio')
         .getPublicUrl(fileName);
       
+      if (!publicURLData?.publicUrl) {
+        throw new Error('Failed to get public URL');
+      }
+      
+      console.log(`Public URL generated: ${publicURLData.publicUrl}`);
+      
       return publicURLData.publicUrl;
     } catch (err) {
-      console.error('Error uploading audio file:', err);
+      console.error(`Error uploading audio file ${fileName}:`, err);
       throw err;
     }
   };
   
-  // Modified save function to upload audio and save URLs
+  // Modified save function with improved error handling and exponential backoff retry
   const saveTestResults = async () => {
     try {
       if (!nasalRecording || !oralRecording) {
@@ -367,19 +383,55 @@ const TestScreen = ({ navigation, route }) => {
       const nasalFileName = `${patient.mrn}_nasal_${timestamp}.mp3`;
       const oralFileName = `${patient.mrn}_oral_${timestamp}.mp3`;
       
-      // Upload both recordings to storage
-      const nasalAudioUrl = await uploadAudioToStorage(nasalRecording.uri, nasalFileName);
-      const oralAudioUrl = await uploadAudioToStorage(oralRecording.uri, oralFileName);
+      console.log('Starting uploads to Supabase...');
+      
+      // Upload both recordings to storage with exponential backoff retry
+      let nasalAudioUrl, oralAudioUrl;
+      
+      const uploadWithRetry = async (uri, fileName, attempt = 1, maxAttempts = 3) => {
+        try {
+          return await uploadAudioToStorage(uri, fileName);
+        } catch (error) {
+          if (attempt < maxAttempts) {
+            // Exponential backoff: wait longer between each retry
+            const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s...
+            console.log(`Upload failed. Retrying in ${delay/1000}s (${attempt}/${maxAttempts-1})...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return uploadWithRetry(uri, fileName, attempt + 1, maxAttempts);
+          }
+          throw error;
+        }
+      };
+      
+      // First upload nasal recording
+      try {
+        console.log('Uploading nasal recording...');
+        nasalAudioUrl = await uploadWithRetry(nasalRecording.uri, nasalFileName);
+        console.log('Nasal recording uploaded successfully');
+      } catch (uploadError) {
+        console.error('Failed to upload nasal recording:', uploadError);
+        throw new Error(`Failed to upload nasal recording: ${uploadError.message}`);
+      }
+      
+      // Then upload oral recording
+      try {
+        console.log('Uploading oral recording...');
+        oralAudioUrl = await uploadWithRetry(oralRecording.uri, oralFileName);
+        console.log('Oral recording uploaded successfully');
+      } catch (uploadError) {
+        console.error('Failed to upload oral recording:', uploadError);
+        throw new Error(`Failed to upload oral recording: ${uploadError.message}`);
+      }
       
       // Calculate mock nasalance score (in a real app, this would be from actual analysis)
       const nasalanceScore = Math.floor(Math.random() * 40) + 20;
       
-      // if for testData should be patient.mrn (as first few digits) concatenate with timestamp (final should be an integer)
-      const testDataId = parseInt(`${patient.mrn}${timestamp}`);
+      // Generate a unique ID that's safer (avoiding integer overflow)
+      const testDataId = `${patient.mrn}${timestamp}`.substring(0, 10);
+      console.log(`Generated test ID: ${testDataId}`);
 
       const testData = {
-        
-        id: testDataId,
+        id: parseInt(testDataId), // Convert to integer
         mrn: patient?.mrn,
         created_at: testDate,
         avg_nasalance_score: nasalanceScore,
@@ -394,12 +446,19 @@ const TestScreen = ({ navigation, route }) => {
         })
       };
       
+      console.log('Saving test data to database...');
+      
       // Insert into the patient_data table
       const { error } = await supabase
         .from('patient_data')
         .insert(testData);
       
-      if (error) throw error;
+      if (error) {
+        console.error('Database insert error:', error);
+        throw error;
+      }
+      
+      console.log('Test results saved successfully');
       
       Alert.alert(
         "Success",
@@ -408,7 +467,11 @@ const TestScreen = ({ navigation, route }) => {
       );
     } catch (error) {
       console.error("Error saving test results:", error);
-      Alert.alert("Error", "Failed to save test results. Please try again.");
+      Alert.alert(
+        "Error", 
+        `Failed to save test results: ${error.message}. Please try again.`,
+        [{ text: "OK" }]
+      );
     } finally {
       setLoading(false);
     }

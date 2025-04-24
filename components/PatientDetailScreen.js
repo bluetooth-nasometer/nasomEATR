@@ -47,7 +47,7 @@ const PatientDetailScreen = ({ route, navigation }) => {
       const { data, error } = await supabase
         .from('patient_data')
         .select('*')
-        .eq('id', patientData.mrn)
+        .eq('mrn', patientData.mrn)
         .order('created_at', { ascending: false });
 
       if (error) throw error;

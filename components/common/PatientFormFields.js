@@ -1,7 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, Keyboard} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../../constants/Colors';
+import { debounce } from 'lodash';
+
 
 const suggestions = {
   languages: ['English', 'Spanish', 'French', 'Mandarin', 'Arabic', 'Hindi', 'Portuguese', 'Bengali', 'Russian', 'Japanese', 'German', 'Italian', 'Korean', 'Turkish', 'Vietnamese', 'Polish', 'Ukrainian', 'Dutch', 'Swedish', 'Norwegian', 'Danish', 'Finnish', 'Greek', 'Hebrew', 'Swahili', 'Persian (Farsi)', 'Thai', 'Indonesian', 'Malay', 'Tagalog', 'Romanian', 'Hungarian', 'Czech', 'Slovak', 'Croatian', 'Serbian', 'Bulgarian', 'Catalan', 'Basque', 'Galician', 'Welsh', 'Irish', 'Scottish Gaelic', 'Latin'],
@@ -11,49 +13,45 @@ const suggestions = {
 };
 
 const AutocompleteInput = ({ placeholder, value, onChangeText, data, style }) => {
-  const [modalVisible, setModalVisible] = useState(false);
   const [filteredData, setFilteredData] = useState([]);
-  const [inputPosition, setInputPosition] = useState({ top: 0, left: 0, width: 0 });
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const inputRef = useRef(null);
 
   const handleChangeText = (text) => {
     onChangeText(text);
-    
+    debouncedFilterData(text);
+  };
+
+  const filterData = (text) => {
     if (text.length > 0) {
-      const filtered = data.filter(item => 
-        item.toLowerCase().includes(text.toLowerCase())
-      ).slice(0, 5); // Limit to 5 suggestions
+      const filtered = data
+        .filter((item) => item.toLowerCase().includes(text.toLowerCase()))
+        .slice(0, 5); // Limit to 5 suggestions
       setFilteredData(filtered);
-      
-      if (filtered.length > 0 && inputRef.current) {
-        // Get position for the dropdown
-        inputRef.current.measure((x, y, width, height, pageX, pageY) => {
-          setInputPosition({
-            top: pageY + height,
-            left: pageX,
-            width: width
-          });
-          setModalVisible(true);
-        });
-      } else {
-        setModalVisible(false);
-      }
+      setShowSuggestions(filtered.length > 0);
     } else {
       setFilteredData([]);
-      setModalVisible(false);
+      setShowSuggestions(false);
     }
   };
 
+  const debouncedFilterData = useRef(debounce(filterData, 300)).current; 
+
   const handleSelectItem = (item) => {
     onChangeText(item);
-    setModalVisible(false);
+    setShowSuggestions(false);
+    Keyboard.dismiss();
   };
-  
+
   const handleFocus = () => {
-    if (value.length > 0) {
-      // Re-trigger filtering when input gets focus
-      handleChangeText(value);
+    if (value.length > 0 && filteredData.length > 0) {
+      setShowSuggestions(true);
     }
+  };
+
+  const handleBlur = () => {
+    // Delay hiding suggestions to allow onPress events to register
+    setTimeout(() => setShowSuggestions(false), 100);
   };
 
   return (
@@ -65,40 +63,21 @@ const AutocompleteInput = ({ placeholder, value, onChangeText, data, style }) =>
         value={value}
         onChangeText={handleChangeText}
         onFocus={handleFocus}
+        onBlur={handleBlur}
       />
-      
-      <Modal
-        transparent={true}
-        visible={modalVisible}
-        animationType="none"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setModalVisible(false)}
-        >
-          <View style={[
-            styles.suggestionsContainer, 
-            { 
-              position: 'absolute',
-              top: inputPosition.top, 
-              left: inputPosition.left,
-              width: inputPosition.width
-            }
-          ]}>
-            {filteredData.map((item, index) => (
-              <TouchableOpacity 
-                key={index}
-                style={styles.suggestionItem} 
-                onPress={() => handleSelectItem(item)}
-              >
-                <Text style={styles.suggestionText}>{item}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      {showSuggestions && (
+        <View style={styles.suggestionsContainer}>
+          {filteredData.map((item, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.suggestionItem}
+              onPress={() => handleSelectItem(item)}
+            >
+              <Text style={styles.suggestionText}>{item}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
     </View>
   );
 };

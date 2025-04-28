@@ -59,7 +59,7 @@ const PatientDetailScreen = ({ route, navigation }) => {
         // Format the date for better readability
         const formattedDate = formatDate(record.created_at);
         // Get nasalance score with 1 decimal place or 'N/A'
-        const nasalance = record.nasalance_score?.toFixed(1) || 'N/A';
+        const nasalance = record.avg_nasalance_score?.toFixed(1) || 'N/A';
         newCsvData.push([count, formattedDate, nasalance]);
         count++;
       });
@@ -413,7 +413,7 @@ const PatientDetailScreen = ({ route, navigation }) => {
                   <Text style={styles.testDate}>{formatDate(test.created_at)}</Text>
                   <Text style={styles.testDetails}>
                     Duration: {formatDuration(test.duration || 0)} • 
-                    Nasalance: {test.nasalance_score?.toFixed(1) || 'N/A'}%
+                    Nasalance: {test.avg_nasalance_score?.toFixed(1) || 'N/A'}%
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#666" />

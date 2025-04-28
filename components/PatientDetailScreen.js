@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { CSVLink, CSVDownload } from "react-csv"; // inserted for CSV export
+
 import {
   View,
   Text,
@@ -26,6 +28,57 @@ const PatientDetailScreen = ({ route, navigation }) => {
   const [notes, setNotes] = useState(route.params.patient.notes || '');
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesChanged, setNotesChanged] = useState(false);
+
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [csvData, setCsvData] = useState([
+    ["#", "Date Test was administered", "Average Nasalance"]
+  ]);
+  
+  const handleExport = async () => {
+    try {
+      // Start loading state
+      //setIsDownloading(true);
+      
+      // Fetch all test data for this patient
+      const { data, error } = await supabase
+        .from('patient_data')
+        .select('*')
+        .eq('mrn', patientData.mrn)
+        .order('created_at', { ascending: true });
+  
+      if (error) throw error;
+      
+      // Create a new array with headers
+      const newCsvData = [
+        ["#", "Date Test was administered", "Average Nasalance"]
+      ];
+      
+      let count = 1;
+      // Add each test record to the CSV data
+      data.forEach(record => {
+        // Format the date for better readability
+        const formattedDate = formatDate(record.created_at);
+        // Get nasalance score with 1 decimal place or 'N/A'
+        const nasalance = record.nasalance_score?.toFixed(1) || 'N/A';
+        newCsvData.push([count, formattedDate, nasalance]);
+        count++;
+      });
+            // Update state with the new CSV data
+      setCsvData(newCsvData);
+      console.log('CSV data prepared:', newCsvData);
+      setIsDownloading(true);
+      // Keep isDownloading true to trigger the CSVDownload component
+      // The timeout will happen after data is prepared
+      setTimeout(() => setIsDownloading(false), 1000);
+      count = 1;
+
+    } 
+    catch (error) {
+      console.error('Error preparing CSV data:', error);
+      Alert.alert('Error', 'Failed to export patient records');
+      setIsDownloading(false); // Make sure to reset loading state on error
+    } 
+  };
 
   useEffect(() => {
     fetchTestHistory();
@@ -328,9 +381,17 @@ const PatientDetailScreen = ({ route, navigation }) => {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Test History</Text>
             <TouchableOpacity>
-              <Ionicons name="filter-outline" size={20} color={Colors.lightNavalBlue} />
+              <Button
+                title="Export"
+                icon="download-outline"
+                onPress={handleExport}
+                size="small"
+              />
+              {/* <Ionicons name="filter-outline" size={20} color={Colors.lightNavalBlue} /> */}
             </TouchableOpacity>
           </View>
+          {isDownloading && <CSVDownload data={csvData} filename={"patient_test_history.csv"} />}
+
           {loading ? (
             <LoadingIndicator text="Loading tests..." />
           ) : testHistory.length === 0 ? (

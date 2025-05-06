@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -11,34 +11,40 @@ import {
   Platform,
   ActivityIndicator,
   ToastAndroid,
-  PermissionsAndroid
+  FlatList,
+  Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
-import * as MediaLibrary from 'expo-media-library';
 import Colors from '../constants/Colors';
 import HeaderBar from './common/HeaderBar';
 import { supabase } from '../utils/supabaseClient';
+import EnhancedAudioModule from '../modules/EnhancedAudioModule';
 
 const TestScreen = ({ navigation, route }) => {
-  const { nasalMic, oralMic, patient } = route.params || {};
+  const { patient } = route.params || {};
   
   // Step management
   const [currentStep, setCurrentStep] = useState(0);
-  const steps = ['Nasal Recording', 'Oral Recording', 'Review'];
+  const steps = ['Device Setup', 'Recording', 'Processing', 'Review'];
   
   // Recording state management
   const [recording, setRecording] = useState(false);
   const [timer, setTimer] = useState(0);
   const [timerInterval, setTimerInterval] = useState(null);
   
-  // Audio recording objects
-  const [audioRecording, setAudioRecording] = useState(null);
-  
   // Audio data storage
+  const [stereoRecording, setStereoRecording] = useState(null);
   const [nasalRecording, setNasalRecording] = useState(null);
   const [oralRecording, setOralRecording] = useState(null);
+  const [nasalanceScore, setNasalanceScore] = useState(null);
+  
+  // Device selection state
+  const [isScanning, setIsScanning] = useState(false);
+  const [audioDevices, setAudioDevices] = useState([]);
+  const [selectedDevice, setSelectedDevice] = useState(null);
+  const [deviceSelectorVisible, setDeviceSelectorVisible] = useState(false);
   
   // Playback states and objects
   const [nasalSound, setNasalSound] = useState(null);
@@ -54,6 +60,12 @@ const TestScreen = ({ navigation, route }) => {
 
   // Add loading state
   const [loading, setLoading] = useState(false);
+  const [processingAudio, setProcessingAudio] = useState(false);
+  
+  // Event subscription refs
+  const deviceConnectedSubscription = useRef(null);
+  const deviceDisconnectedSubscription = useRef(null);
+  const deviceListChangedSubscription = useRef(null);
 
   // Request microphone permissions when component mounts
   useEffect(() => {
@@ -61,16 +73,37 @@ const TestScreen = ({ navigation, route }) => {
       await requestMicrophonePermission();
     })();
     
+    // Start device scanning
+    startDeviceScan();
+    
     return () => {
       // Clean up recordings and sounds when component unmounts
-      if (audioRecording) {
-        audioRecording.stopAndUnloadAsync();
+      if (recording) {
+        stopRecording();
       }
+      
       if (nasalSound) {
         nasalSound.unloadAsync();
       }
+      
       if (oralSound) {
         oralSound.unloadAsync();
+      }
+      
+      // Stop device scanning
+      stopDeviceScan();
+      
+      // Unsubscribe from device events
+      if (deviceConnectedSubscription.current) {
+        deviceConnectedSubscription.current.remove();
+      }
+      
+      if (deviceDisconnectedSubscription.current) {
+        deviceDisconnectedSubscription.current.remove();
+      }
+      
+      if (deviceListChangedSubscription.current) {
+        deviceListChangedSubscription.current.remove();
       }
     };
   }, []);
@@ -118,6 +151,151 @@ const TestScreen = ({ navigation, route }) => {
     };
   }, [recording]);
 
+  const isEnhancedAudioAvailable = () => {
+    if (!EnhancedAudioModule.isAvailable || !EnhancedAudioModule.isAvailable()) {
+      Alert.alert(
+        "Enhanced Audio Not Available",
+        "The enhanced audio recording module is not available on this device. Some features may not work correctly.",
+        [{ text: "OK" }]
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const startDeviceScan = async () => {
+    if (!isEnhancedAudioAvailable()) return;
+    
+    try {
+      setIsScanning(true);
+      
+      // Subscribe to device events
+      deviceConnectedSubscription.current = EnhancedAudioModule.addDeviceConnectedListener(
+        device => {
+          Alert.alert(
+            'Device Connected',
+            `${device.name} connected`,
+            [{ text: 'OK' }]
+          );
+          refreshDeviceList();
+        }
+      );
+      
+      deviceDisconnectedSubscription.current = EnhancedAudioModule.addDeviceDisconnectedListener(
+        device => {
+          Alert.alert(
+            'Device Disconnected',
+            `${device.name} disconnected`,
+            [{ text: 'OK' }]
+          );
+          
+          // If the disconnected device was selected, reset selection
+          if (selectedDevice && selectedDevice.id === device.id) {
+            setSelectedDevice(null);
+          }
+          
+          refreshDeviceList();
+        }
+      );
+      
+      deviceListChangedSubscription.current = EnhancedAudioModule.addDeviceListChangedListener(
+        () => refreshDeviceList()
+      );
+      
+      // Start scanning for devices
+      await EnhancedAudioModule.startDeviceScan();
+      
+      // Get initial device list
+      refreshDeviceList();
+    } catch (error) {
+      console.error('Error starting device scan:', error);
+      Alert.alert('Device Scan Error', 'Failed to start scanning for audio devices.');
+    }
+  };
+  
+  const stopDeviceScan = async () => {
+    if (!isEnhancedAudioAvailable() || !isScanning) return;
+    
+    try {
+      await EnhancedAudioModule.stopDeviceScan();
+      setIsScanning(false);
+    } catch (error) {
+      console.error('Error stopping device scan:', error);
+    }
+  };
+  
+  const refreshDeviceList = async () => {
+    if (!isEnhancedAudioAvailable()) return;
+    
+    try {
+      const devices = await EnhancedAudioModule.getAvailableDevices();
+      
+      // Add special check for DJI devices
+      const enhancedDevices = devices.map(device => {
+        if (device.name && device.name.toLowerCase().includes('dji')) {
+          return {
+            ...device,
+            capabilities: {
+              ...device.capabilities,
+              stereo: true
+            }
+          };
+        }
+        return device;
+      });
+      
+      setAudioDevices(enhancedDevices);
+      
+      // If no device is selected yet, try to select the default
+      if (!selectedDevice) {
+        const currentDevice = await EnhancedAudioModule.getCurrentDevice();
+        if (currentDevice) {
+          setSelectedDevice(currentDevice);
+        }
+        
+        // Auto-select DJI device if available
+        const djiDevice = enhancedDevices.find(d => 
+          d.name && d.name.toLowerCase().includes('dji'));
+        
+        if (djiDevice) {
+          selectAudioDevice(djiDevice);
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing device list:', error);
+    }
+  };
+  
+  const selectAudioDevice = async (device) => {
+    if (!isEnhancedAudioAvailable()) return;
+    
+    try {
+      // Do not allow changing devices during recording
+      if (recording) {
+        Alert.alert('Cannot Change Device', 'Stop recording before changing the input device.');
+        return;
+      }
+      
+      const selected = await EnhancedAudioModule.selectDevice(device.id);
+      setSelectedDevice(selected);
+      setDeviceSelectorVisible(false);
+      
+      // Check if this device supports stereo recording
+      const stereoSupported = await EnhancedAudioModule.supportsStereoRecording(device.id);
+      
+      if (!stereoSupported) {
+        Alert.alert(
+          'Stereo Recording Not Supported',
+          'This device may not support stereo recording, which is required for nasal/oral calibration.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error selecting device:', error);
+      Alert.alert('Device Selection Error', error.message || 'Failed to select audio device.');
+    }
+  };
+
   // Request microphone permission
   const requestMicrophonePermission = async () => {
     try {
@@ -146,48 +324,8 @@ const TestScreen = ({ navigation, route }) => {
     }
   };
 
-  const saveToAppStorage = async (uri, fileName) => {
-    try {
-      console.log(`Saving ${fileName} to app storage from ${uri}`);
-      
-      // Create a path in the app's internal storage
-      const destinationUri = `${FileSystem.documentDirectory}${fileName}`;
-      
-      // Copy the file to our app's document directory which we have full access to
-      await FileSystem.copyAsync({
-        from: uri,
-        to: destinationUri
-      });
-      
-      console.log(`File saved to app storage: ${destinationUri}`);
-      
-      if (Platform.OS === 'android') {
-        ToastAndroid.show(`Recording saved`, ToastAndroid.SHORT);
-      }
-      
-      return destinationUri;
-    } catch (error) {
-      console.error('Error saving file to app storage:', error);
-      Alert.alert('Save Error', `Failed to save recording: ${error.message}`);
-      return uri; // Return original URI as fallback
-    }
-  };
-
-  const deleteAppStorageFile = async (uri) => {
-    try {
-      if (!uri || !uri.startsWith(FileSystem.documentDirectory)) return false;
-      
-      await FileSystem.deleteAsync(uri, { idempotent: true });
-      console.log(`Successfully deleted file from app storage: ${uri}`);
-      return true;
-    } catch (error) {
-      console.error(`Error deleting file ${uri}:`, error);
-      return false;
-    }
-  };
-
   const handleBackPress = () => {
-    if (recording || nasalRecording || oralRecording) {
+    if (recording || stereoRecording) {
       Alert.alert(
         "Leave Test?",
         "Any unsaved recordings will be lost.",
@@ -201,108 +339,149 @@ const TestScreen = ({ navigation, route }) => {
     }
   };
   
+  const moveToRecordingStep = () => {
+    if (!selectedDevice) {
+      Alert.alert(
+        "No Device Selected",
+        "Please select an audio input device before proceeding.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+    
+    // Check if device supports stereo recording
+    if (selectedDevice.capabilities && !selectedDevice.capabilities.stereo) {
+      Alert.alert(
+        "Warning",
+        "The selected device may not support stereo recording, which is required for proper nasalance measurement.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Continue Anyway", onPress: () => setCurrentStep(1) }
+        ]
+      );
+      return;
+    }
+    
+    setCurrentStep(1);
+  };
+  
   const startRecording = async () => {
     if (!hasPermission) {
       await requestMicrophonePermission();
       if (!hasPermission) return;
     }
     
+    if (!isEnhancedAudioAvailable()) return;
+    
     try {
       setTimer(0);
       
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
+      const timestamp = Date.now();
+      const fileName = `stereo_recording_${timestamp}.pcm`;
+      const filePath = `${FileSystem.documentDirectory}${fileName}`;
       
-      const recording = new Audio.Recording();
+      console.log("Starting recording to path:", filePath);
       
-      await recording.prepareToRecordAsync({
-        android: {
-          extension: '.mp3',
-          outputFormat: Audio.RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4,
-          audioEncoder: Audio.RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC,
-          sampleRate: 44100,
-          numberOfChannels: 2,
-          bitRate: 128000,
-        },
-        ios: {
-          extension: '.m4a',
-          audioQuality: Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_MAX,
-          sampleRate: 44100,
-          numberOfChannels: 2,
-          bitRate: 128000,
-          linearPCMBitDepth: 16,
-          linearPCMIsBigEndian: false,
-          linearPCMIsFloat: false,
-        },
-        web: {
-          mimeType: 'audio/webm',
-          bitsPerSecond: 128000,
-        }
-      });
+      const result = await EnhancedAudioModule.startRecording(filePath);
+      console.log("Recording started, result:", result);
       
-      await recording.startAsync();
-      
-      setAudioRecording(recording);
       setRecording(true);
-    } catch (err) {
-      console.error('Failed to start recording', err);
-      Alert.alert('Error', 'Failed to start recording: ' + err.message);
+    } catch (error) {
+      console.error('Failed to start recording', error);
+      Alert.alert('Recording Error', 'Failed to start recording: ' + error.message);
     }
   };
   
   const stopRecording = async () => {
+    if (!isEnhancedAudioAvailable() || !recording) return;
+    
     try {
-      if (!audioRecording) return;
-      
       setRecording(false);
       
-      await audioRecording.stopAndUnloadAsync();
+      const result = await EnhancedAudioModule.stopRecording();
+      console.log("Recording stopped, result:", result);
       
-      const uri = audioRecording.getURI();
-      console.log(`Recording stopped. URI: ${uri}`);
+      const uri = result.path;
+      
+      setStereoRecording({
+        duration: timer,
+        timestamp: new Date().toISOString(),
+        uri: uri,
+        localPath: uri
+      });
+      
+      // Move to processing step
+      setCurrentStep(2);
+      processRecording(uri);
+    } catch (error) {
+      console.error('Failed to stop recording', error);
+      Alert.alert('Recording Error', 'Failed to save recording: ' + error.message);
+      setRecording(false);
+    }
+  };
+
+  const processRecording = async (stereoPath) => {
+    if (!isEnhancedAudioAvailable()) return;
+    
+    try {
+      setProcessingAudio(true);
       
       const timestamp = Date.now();
-      let localPath = null;
+      const nasalFileName = `nasal_${timestamp}.pcm`;
+      const oralFileName = `oral_${timestamp}.pcm`;
       
-      if (currentStep === 0) {
-        const fileName = `nasal_recording_${timestamp}.mp3`;
-        
-        // Use app storage instead of downloads
-        localPath = await saveToAppStorage(uri, fileName);
-        console.log('Nasal recording saved locally at:', localPath);
-        
-        setNasalRecording({
-          duration: timer,
-          timestamp: new Date().toISOString(),
-          uri: uri,
-          localPath: localPath || uri
-        });
-      } else if (currentStep === 1) {
-        const fileName = `oral_recording_${timestamp}.mp3`;
-        
-        // Use app storage instead of downloads
-        localPath = await saveToAppStorage(uri, fileName);
-        console.log('Oral recording saved locally at:', localPath);
-        
-        setOralRecording({
-          duration: timer,
-          timestamp: new Date().toISOString(),
-          uri: uri,
-          localPath: localPath || uri
-        });
-      }
+      const nasalPath = `${FileSystem.documentDirectory}${nasalFileName}`;
+      const oralPath = `${FileSystem.documentDirectory}${oralFileName}`;
       
-      setAudioRecording(null);
-    } catch (err) {
-      console.error('Failed to stop recording', err);
-      Alert.alert('Error', 'Failed to save recording: ' + err.message);
-      setAudioRecording(null);
-      setRecording(false);
+      console.log(`Processing stereo recording: ${stereoPath}`);
+      console.log(`Target paths - Nasal: ${nasalPath}, Oral: ${oralPath}`);
+      
+      // Use the native module to split the stereo recording into mono channels
+      const result = await EnhancedAudioModule.splitStereoToMono(
+        stereoPath,
+        nasalPath, // left channel = nasal mic
+        oralPath   // right channel = oral mic
+      );
+      
+      console.log("Split complete, result:", result);
+      
+      // Calculate RMS values for both channels using the native module
+      const nasalRms = await EnhancedAudioModule.calculateRms(result.leftPath);
+      const oralRms = await EnhancedAudioModule.calculateRms(result.rightPath);
+      
+      console.log(`RMS values - Nasal: ${nasalRms}, Oral: ${oralRms}`);
+      
+      // Calculate nasalance score (nasal / (nasal + oral) * 100)
+      const calculatedScore = (nasalRms / (nasalRms + oralRms)) * 100;
+      
+      console.log(`Calculated nasalance score: ${calculatedScore}`);
+      
+      // Store the processed files and score
+      const recordingDuration = stereoRecording ? stereoRecording.duration : timer;
+      
+      setNasalRecording({
+        duration: recordingDuration,
+        timestamp: new Date().toISOString(),
+        uri: result.leftPath,
+        localPath: result.leftPath
+      });
+      
+      setOralRecording({
+        duration: recordingDuration,
+        timestamp: new Date().toISOString(),
+        uri: result.rightPath,
+        localPath: result.rightPath
+      });
+      
+      setNasalanceScore(calculatedScore);
+      setProcessingAudio(false);
+      
+      // Move to review step
+      setCurrentStep(3);
+    } catch (error) {
+      console.error('Failed to process recording', error);
+      Alert.alert('Processing Error', 'Failed to process recording: ' + error.message);
+      setProcessingAudio(false);
     }
   };
   
@@ -333,9 +512,9 @@ const TestScreen = ({ navigation, route }) => {
             setIsPlayingNasal(false);
           }
         });
-      } catch (err) {
-        console.error('Failed to play nasal recording', err);
-        Alert.alert('Error', 'Failed to play recording');
+      } catch (error) {
+        console.error('Failed to play nasal recording', error);
+        Alert.alert('Playback Error', 'Failed to play recording');
       }
     }
   };
@@ -367,9 +546,9 @@ const TestScreen = ({ navigation, route }) => {
             setIsPlayingOral(false);
           }
         });
-      } catch (err) {
-        console.error('Failed to play oral recording', err);
-        Alert.alert('Error', 'Failed to play recording');
+      } catch (error) {
+        console.error('Failed to play oral recording', error);
+        Alert.alert('Playback Error', 'Failed to play recording');
       }
     }
   };
@@ -379,21 +558,7 @@ const TestScreen = ({ navigation, route }) => {
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
-  
-  const nextStep = () => {
-    if (currentStep < 2) {
-      setCurrentStep(currentStep + 1);
-      setTimer(0);
-    }
-  };
-  
-  const prevStep = () => {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
-      setTimer(0);
-    }
-  };
-  
+
   const uploadAudioToStorage = async (uri, fileName) => {
     try {
       console.log(`Starting upload for ${fileName} from ${uri}`);
@@ -458,8 +623,8 @@ const TestScreen = ({ navigation, route }) => {
   
   const saveTestResults = async () => {
     try {
-      if (!nasalRecording || !oralRecording) {
-        Alert.alert("Error", "Both recordings must be completed before saving");
+      if (!nasalRecording || !oralRecording || nasalanceScore === null) {
+        Alert.alert("Error", "Processing must be completed before saving");
         return;
       }
       
@@ -471,8 +636,8 @@ const TestScreen = ({ navigation, route }) => {
       console.log('Nasal recording local path:', nasalRecording.localPath || 'Not available');
       console.log('Oral recording local path:', oralRecording.localPath || 'Not available');
       
-      const nasalFileName = `${patient.mrn}_nasal_${timestamp}.mp3`;
-      const oralFileName = `${patient.mrn}_oral_${timestamp}.mp3`;
+      const nasalFileName = `${patient.mrn}_nasal_${timestamp}.pcm`;
+      const oralFileName = `${patient.mrn}_oral_${timestamp}.pcm`;
       
       console.log('Starting uploads to Supabase...');
       
@@ -516,29 +681,25 @@ const TestScreen = ({ navigation, route }) => {
         throw new Error(`Failed to upload oral recording: ${uploadError.message}`);
       }
       
-      // Calculate mock nasalance score (in a real app, this would be from actual analysis)
-      const nasalanceScore = Math.floor(Math.random() * 40) + 20;
+      // Use the actual calculated nasalance score
+      const calculatedNasalanceScore = Math.round(nasalanceScore);
       
-      // Generate a truly unique ID using time-based approach
-      // Use UUID pattern for more uniqueness
+      // Generate a unique ID
       const randomPart = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
       const testDataId = parseInt(`${timestamp}${randomPart}`.substring(0, 10));
       console.log(`Generated test ID: ${testDataId}`);
 
-      // If we're still concerned about uniqueness, we can simply omit the ID entirely
-      // and let Supabase generate one for us with its auto-incrementing ID feature
       const testData = {
-        // id: testDataId, // Let Supabase generate this automatically
         mrn: patient?.mrn,
         created_at: testDate,
-        avg_nasalance_score: nasalanceScore,
+        avg_nasalance_score: calculatedNasalanceScore,
         nasal_audio: nasalAudioUrl,
         oral_audio: oralAudioUrl,
         nasalance_data: JSON.stringify({
-          score: nasalanceScore,
-          nasal_device: nasalMic?.name || 'Internal Microphone',
-          oral_device: oralMic?.name || 'Internal Microphone',
-          duration: nasalRecording.duration + oralRecording.duration,
+          score: calculatedNasalanceScore,
+          nasal_device: selectedDevice?.name || 'Internal Microphone',
+          oral_device: selectedDevice?.name || 'Internal Microphone',
+          duration: nasalRecording.duration,
           recording_date: testDate
         })
       };
@@ -564,25 +725,32 @@ const TestScreen = ({ navigation, route }) => {
       console.log('Test results saved successfully', data);
       
       // Now that everything is saved, delete the local files
-      let deletedNasal = false, deletedOral = false;
-      
-      if (nasalLocalPath && nasalLocalPath.startsWith(FileSystem.documentDirectory)) {
-        deletedNasal = await deleteAppStorageFile(nasalLocalPath);
-        console.log(deletedNasal ? 'Deleted nasal recording file' : 'Failed to delete nasal recording file');
+      try {
+        // Delete nasal recording
+        if (nasalLocalPath && nasalLocalPath.startsWith(FileSystem.documentDirectory)) {
+          await FileSystem.deleteAsync(nasalLocalPath, { idempotent: true });
+          console.log('Deleted nasal recording file');
+        }
+        
+        // Delete oral recording
+        if (oralLocalPath && oralLocalPath.startsWith(FileSystem.documentDirectory)) {
+          await FileSystem.deleteAsync(oralLocalPath, { idempotent: true });
+          console.log('Deleted oral recording file');
+        }
+        
+        // Delete stereo recording
+        if (stereoRecording && stereoRecording.localPath && 
+            stereoRecording.localPath.startsWith(FileSystem.documentDirectory)) {
+          await FileSystem.deleteAsync(stereoRecording.localPath, { idempotent: true });
+          console.log('Deleted stereo recording file');
+        }
+      } catch (deleteError) {
+        console.warn('Error deleting local files:', deleteError);
       }
-      
-      if (oralLocalPath && oralLocalPath.startsWith(FileSystem.documentDirectory)) {
-        deletedOral = await deleteAppStorageFile(oralLocalPath);
-        console.log(deletedOral ? 'Deleted oral recording file' : 'Failed to delete oral recording file');
-      }
-      
-      const deletionMessage = deletedNasal && deletedOral ? 
-        'Local files deleted after upload.' : 
-        'Note: Some local files could not be deleted.';
       
       Alert.alert(
         "Success",
-        `Test results and audio recordings saved successfully. ${deletionMessage}`,
+        "Test results and audio recordings saved successfully.",
         [{ text: "OK", onPress: () => navigation.navigate('PatientDetail', { patient }) }]
       );
     } catch (error) {
@@ -624,6 +792,140 @@ const TestScreen = ({ navigation, route }) => {
       </View>
     );
   };
+
+  const renderDeviceItem = ({ item }) => {
+    const isSelected = selectedDevice && selectedDevice.id === item.id;
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.deviceItem,
+          isSelected && styles.deviceItemSelected
+        ]}
+        onPress={() => selectAudioDevice(item)}
+      >
+        <View style={styles.deviceIconContainer}>
+          {item.type === 'usb' && (
+            <Ionicons name="usb" size={20} color={isSelected ? "#fff" : Colors.lightNavalBlue} />
+          )}
+          {item.type === 'bluetooth' && (
+            <Ionicons name="bluetooth" size={20} color={isSelected ? "#fff" : Colors.lightNavalBlue} />
+          )}
+          {item.type === 'builtin' && (
+            <Ionicons name="mic" size={20} color={isSelected ? "#fff" : Colors.lightNavalBlue} />
+          )}
+          {item.type === 'wired' && (
+            <Ionicons name="headset" size={20} color={isSelected ? "#fff" : Colors.lightNavalBlue} />
+          )}
+          {item.type !== 'usb' && item.type !== 'bluetooth' && 
+            item.type !== 'builtin' && item.type !== 'wired' && (
+            <Ionicons name="hardware-chip" size={20} color={isSelected ? "#fff" : Colors.lightNavalBlue} />
+          )}
+        </View>
+        
+        <View style={styles.deviceInfoContainer}>
+          <Text style={[
+            styles.deviceName,
+            isSelected && styles.deviceNameSelected
+          ]}>
+            {item.name}
+          </Text>
+          
+          <Text style={[
+            styles.deviceType,
+            isSelected && styles.deviceTypeSelected
+          ]}>
+            {item.type.charAt(0).toUpperCase() + item.type.slice(1)} 
+            {item.capabilities && item.capabilities.stereo ? ' • Stereo' : ' • Mono'}
+          </Text>
+        </View>
+        
+        {isSelected && (
+          <Ionicons name="checkmark-circle" size={20} color="#fff" />
+        )}
+      </TouchableOpacity>
+    );
+  };
+  
+  const renderDeviceSelection = () => {
+    return (
+      <View style={styles.deviceSelectionContainer}>
+        <Text style={styles.sectionTitle}>Audio Input Device</Text>
+        
+        <Text style={styles.instructions}>
+          Please select a stereo audio device for recording. The device should have two microphones:
+          one positioned near the nose and one near the mouth for accurate nasalance measurement.
+        </Text>
+        
+        {selectedDevice ? (
+          <View style={styles.selectedDeviceContainer}>
+            <View style={styles.deviceIconLarge}>
+              {selectedDevice.type === 'usb' && <Ionicons name="usb" size={24} color="#fff" />}
+              {selectedDevice.type === 'bluetooth' && <Ionicons name="bluetooth" size={24} color="#fff" />}
+              {selectedDevice.type === 'builtin' && <Ionicons name="mic" size={24} color="#fff" />}
+              {selectedDevice.type === 'wired' && <Ionicons name="headset" size={24} color="#fff" />}
+              {selectedDevice.type !== 'usb' && selectedDevice.type !== 'bluetooth' && 
+               selectedDevice.type !== 'builtin' && selectedDevice.type !== 'wired' && (
+                <Ionicons name="hardware-chip" size={24} color="#fff" />
+              )}
+            </View>
+            
+            <View style={styles.selectedDeviceInfo}>
+              <Text style={styles.selectedDeviceName}>{selectedDevice.name}</Text>
+              <Text style={styles.selectedDeviceType}>
+                {selectedDevice.type.charAt(0).toUpperCase() + selectedDevice.type.slice(1)} 
+                {selectedDevice.capabilities && selectedDevice.capabilities.stereo ? ' • Stereo' : ' • Mono'}
+              </Text>
+            </View>
+            
+            <TouchableOpacity 
+              style={styles.changeDeviceButton}
+              onPress={() => setDeviceSelectorVisible(true)}>
+              <Text style={styles.changeDeviceText}>Change</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity 
+            style={styles.selectDeviceButton}
+            onPress={() => setDeviceSelectorVisible(true)}>
+            <Ionicons name="hardware-chip-outline" size={20} color="#fff" />
+            <Text style={styles.selectDeviceButtonText}>Select Audio Device</Text>
+          </TouchableOpacity>
+        )}
+        
+        <View style={styles.deviceTips}>
+          <Text style={styles.deviceTipsTitle}>Tips for Best Results:</Text>
+          
+          <View style={styles.tipContainer}>
+            <Ionicons name="information-circle-outline" size={18} color={Colors.lightNavalBlue} />
+            <Text style={styles.tipText}>Use a stereo microphone like the DJI Mic 2</Text>
+          </View>
+          
+          <View style={styles.tipContainer}>
+            <Ionicons name="information-circle-outline" size={18} color={Colors.lightNavalBlue} />
+            <Text style={styles.tipText}>Position one microphone near the nose and one near the mouth</Text>
+          </View>
+          
+          <View style={styles.tipContainer}>
+            <Ionicons name="information-circle-outline" size={18} color={Colors.lightNavalBlue} />
+            <Text style={styles.tipText}>Ensure the environment is quiet during recording</Text>
+          </View>
+        </View>
+        
+        <TouchableOpacity 
+          style={[
+            styles.continueButton,
+            !selectedDevice && styles.buttonDisabled
+          ]}
+          onPress={moveToRecordingStep}
+          disabled={!selectedDevice}
+        >
+          <Text style={styles.continueButtonText}>Continue to Recording</Text>
+          <Ionicons name="arrow-forward" size={20} color="white" />
+        </TouchableOpacity>
+      </View>
+    );
+  };
   
   const renderRecordingControls = () => {
     return (
@@ -653,14 +955,23 @@ const TestScreen = ({ navigation, route }) => {
     );
   };
   
-  const renderNasalRecording = () => {
+  const renderStereoRecording = () => {
     return (
       <View style={styles.recordingContainer}>
         <View style={styles.microphoneInfo}>
-          <Ionicons name="mic" size={40} color={Colors.lightNavalBlue} />
-          <Text style={styles.recordingTitle}>Nasal Microphone Recording</Text>
+          <View style={styles.microphoneIconsContainer}>
+            <Ionicons name="mic" size={32} color={Colors.lightNavalBlue} />
+            <Ionicons name="mic-outline" size={32} color={Colors.lightNavalBlue} />
+          </View>
+          <Text style={styles.recordingTitle}>Stereo Recording</Text>
           <Text style={styles.instructions}>
-            Position the nasal microphone and record the subject reading the provided passage
+            Position both microphones (nasal and oral) and record the subject reading the provided passage
+          </Text>
+        </View>
+        
+        <View style={styles.selectedDeviceReminder}>
+          <Text style={styles.selectedDeviceReminderText}>
+            Recording with: {selectedDevice?.name || 'Unknown Device'}
           </Text>
         </View>
         
@@ -677,63 +988,19 @@ const TestScreen = ({ navigation, route }) => {
         </View>
         
         {renderRecordingControls()}
-        
-        {nasalRecording && !recording && (
-          <TouchableOpacity 
-            style={styles.nextButton}
-            onPress={nextStep}
-          >
-            <Text style={styles.nextButtonText}>Continue to Oral Recording</Text>
-            <Ionicons name="arrow-forward" size={20} color="white" />
-          </TouchableOpacity>
-        )}
       </View>
     );
   };
   
-  const renderOralRecording = () => {
+  const renderProcessing = () => {
     return (
-      <View style={styles.recordingContainer}>
-        <View style={styles.microphoneInfo}>
-          <Ionicons name="mic-outline" size={40} color={Colors.lightNavalBlue} />
-          <Text style={styles.recordingTitle}>Oral Microphone Recording</Text>
-          <Text style={styles.instructions}>
-            Position the oral microphone and record the subject reading the same passage
+      <View style={styles.processingContainer}>
+        <View style={styles.processingContent}>
+          <ActivityIndicator size="large" color={Colors.lightNavalBlue} />
+          <Text style={styles.processingText}>Processing Audio</Text>
+          <Text style={styles.processingSubtext}>
+            Splitting stereo recording into nasal and oral channels...
           </Text>
-        </View>
-        
-        <View style={styles.timerContainer}>
-          <Text style={styles.timer}>{formatTime(timer)}</Text>
-          {recording && (
-            <Animated.View 
-              style={[
-                styles.recordingIndicator,
-                { transform: [{ scale: pulseAnim }] }
-              ]}
-            />
-          )}
-        </View>
-        
-        {renderRecordingControls()}
-        
-        <View style={styles.navigationRow}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={prevStep}
-          >
-            <Ionicons name="arrow-back" size={20} color={Colors.lightNavalBlue} />
-            <Text style={styles.backButtonText}>Back</Text>
-          </TouchableOpacity>
-          
-          {oralRecording && !recording && (
-            <TouchableOpacity 
-              style={styles.nextButton}
-              onPress={nextStep}
-            >
-              <Text style={styles.nextButtonText}>Review Recordings</Text>
-              <Ionicons name="arrow-forward" size={20} color="white" />
-            </TouchableOpacity>
-          )}
         </View>
       </View>
     );
@@ -742,12 +1009,24 @@ const TestScreen = ({ navigation, route }) => {
   const renderReview = () => {
     return (
       <View style={styles.reviewContainer}>
-        <Text style={styles.reviewTitle}>Review Recordings</Text>
+        <Text style={styles.reviewTitle}>Review Results</Text>
+        
+        {/* Nasalance Score */}
+        <View style={styles.scoreContainer}>
+          <Text style={styles.scoreLabel}>Nasalance Score</Text>
+          <Text style={styles.scoreValue}>{Math.round(nasalanceScore)}%</Text>
+        </View>
+        
+        {/* Device info */}
+        <View style={styles.reviewDeviceInfo}>
+          <Text style={styles.reviewDeviceTitle}>Recording Device</Text>
+          <Text style={styles.reviewDeviceName}>{selectedDevice?.name || 'Unknown Device'}</Text>
+        </View>
         
         {/* Nasal Recording Review */}
         <View style={styles.recordingReview}>
           <View style={styles.recordingInfo}>
-            <Text style={styles.recordingTypeLabel}>Nasal Recording</Text>
+            <Text style={styles.recordingTypeLabel}>Nasal Channel</Text>
             <Text style={styles.recordingDuration}>Duration: {formatTime(nasalRecording?.duration || 0)}</Text>
           </View>
           
@@ -767,7 +1046,7 @@ const TestScreen = ({ navigation, route }) => {
         {/* Oral Recording Review */}
         <View style={styles.recordingReview}>
           <View style={styles.recordingInfo}>
-            <Text style={styles.recordingTypeLabel}>Oral Recording</Text>
+            <Text style={styles.recordingTypeLabel}>Oral Channel</Text>
             <Text style={styles.recordingDuration}>Duration: {formatTime(oralRecording?.duration || 0)}</Text>
           </View>
           
@@ -785,15 +1064,6 @@ const TestScreen = ({ navigation, route }) => {
         </View>
         
         <View style={styles.navigationRow}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={prevStep}
-            disabled={loading}
-          >
-            <Ionicons name="arrow-back" size={20} color={Colors.lightNavalBlue} />
-            <Text style={styles.backButtonText}>Back</Text>
-          </TouchableOpacity>
-          
           <TouchableOpacity 
             style={[styles.saveButton, loading && styles.disabledButton]}
             onPress={saveTestResults}
@@ -819,10 +1089,12 @@ const TestScreen = ({ navigation, route }) => {
   const renderCurrentStep = () => {
     switch(currentStep) {
       case 0:
-        return renderNasalRecording();
+        return renderDeviceSelection();
       case 1:
-        return renderOralRecording();
+        return renderStereoRecording();
       case 2:
+        return renderProcessing();
+      case 3:
         return renderReview();
       default:
         return null;
@@ -845,9 +1117,60 @@ const TestScreen = ({ navigation, route }) => {
         
         {renderCurrentStep()}
       </ScrollView>
+      
+      {/* Device Selector Modal */}
+      <Modal
+        visible={deviceSelectorVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setDeviceSelectorVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Audio Device</Text>
+              <TouchableOpacity 
+                style={styles.modalCloseButton}
+                onPress={() => setDeviceSelectorVisible(false)}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            {audioDevices.length > 0 ? (
+              <FlatList
+                data={audioDevices}
+                renderItem={renderDeviceItem}
+                keyExtractor={(item) => item.id}
+                style={styles.deviceList}
+                contentContainerStyle={styles.deviceListContent}
+              />
+            ) : (
+              <View style={styles.noDevicesContainer}>
+                <Ionicons name="alert-circle-outline" size={40} color="#999" />
+                <Text style={styles.noDevicesText}>No audio devices found</Text>
+                <Text style={styles.noDevicesSubtext}>
+                  Connect a USB or Bluetooth audio device and try again
+                </Text>
+                
+                <TouchableOpacity 
+                  style={styles.refreshButton}
+                  onPress={refreshDeviceList}
+                >
+                  <Ionicons name="refresh" size={18} color="#fff" />
+                  <Text style={styles.refreshButtonText}>Refresh Devices</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
+
+// Export the component
+export default TestScreen;
 
 const styles = StyleSheet.create({
   container: {
@@ -916,6 +1239,224 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   
+  // Device selection styles
+  deviceSelectionContainer: {
+    padding: 20,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.lightNavalBlue,
+    marginBottom: 12,
+  },
+  instructions: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  selectDeviceButton: {
+    backgroundColor: Colors.lightNavalBlue,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  selectDeviceButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  selectedDeviceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#f0f8ff',
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  deviceIconLarge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.lightNavalBlue,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedDeviceInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  selectedDeviceName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+  },
+  selectedDeviceType: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 2,
+  },
+  changeDeviceButton: {
+    backgroundColor: '#e9ecef',
+    padding: 8,
+    borderRadius: 6,
+  },
+  changeDeviceText: {
+    color: '#495057',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  deviceTips: {
+    marginBottom: 20,
+  },
+  deviceTipsTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: Colors.lightNavalBlue,
+    marginBottom: 10,
+  },
+  tipContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  tipText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+  },
+  continueButton: {
+    backgroundColor: Colors.lightNavalBlue,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 25,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  continueButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    marginRight: 8,
+  },
+  
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '90%',
+    maxHeight: '80%',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.lightNavalBlue,
+  },
+  modalCloseButton: {
+    padding: 6,
+  },
+  deviceList: {
+    maxHeight: 400,
+  },
+  deviceListContent: {
+    padding: 8,
+  },
+  deviceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    backgroundColor: '#f8f9fa',
+  },
+  deviceItemSelected: {
+    backgroundColor: Colors.lightNavalBlue,
+  },
+  deviceIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#e9ecef',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  deviceInfoContainer: {
+    flex: 1,
+  },
+  deviceName: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#333',
+  },
+  deviceNameSelected: {
+    color: '#fff',
+  },
+  deviceType: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  deviceTypeSelected: {
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  noDevicesContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  noDevicesText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#666',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  noDevicesSubtext: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  refreshButton: {
+    backgroundColor: Colors.lightNavalBlue,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+    borderRadius: 8,
+    width: 150,
+  },
+  refreshButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    marginLeft: 6,
+    fontSize: 14,
+  },
+  
   // Recording container styles
   recordingContainer: {
     alignItems: 'center',
@@ -927,7 +1468,15 @@ const styles = StyleSheet.create({
   },
   microphoneInfo: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
+  },
+  microphoneIconsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    width: 100,
+    justifyContent: 'space-between',
   },
   recordingTitle: {
     fontSize: 18,
@@ -936,11 +1485,43 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 8,
   },
-  instructions: {
+  selectedDeviceReminder: {
+    backgroundColor: '#e9ecef',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    marginBottom: 16,
+  },
+  selectedDeviceReminderText: {
+    color: '#555',
+    fontSize: 14,
+  },
+  
+  // Processing styles
+  processingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    borderRadius: 10,
+    backgroundColor: '#f8f9fa',
+    marginTop: 10,
+    paddingHorizontal: 15,
+    minHeight: 300,
+    justifyContent: 'center',
+  },
+  processingContent: {
+    alignItems: 'center',
+  },
+  processingText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.lightNavalBlue,
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  processingSubtext: {
     textAlign: 'center',
     color: '#666',
-    marginBottom: 20,
-    paddingHorizontal: 20,
+    marginTop: 10,
   },
   
   // Timer styles
@@ -993,35 +1574,9 @@ const styles = StyleSheet.create({
   // Navigation buttons
   navigationRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     width: '100%',
     marginTop: 20,
-  },
-  nextButton: {
-    backgroundColor: Colors.lightNavalBlue,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  nextButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    marginRight: 8,
-  },
-  backButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 25,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-  },
-  backButtonText: {
-    color: Colors.lightNavalBlue,
-    fontWeight: 'bold',
-    marginLeft: 8,
   },
   
   // Review styles
@@ -1038,6 +1593,39 @@ const styles = StyleSheet.create({
     color: Colors.lightNavalBlue,
     marginBottom: 20,
     textAlign: 'center',
+  },
+  scoreContainer: {
+    backgroundColor: Colors.lightNavalBlue,
+    borderRadius: 10,
+    padding: 15,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  scoreLabel: {
+    color: 'white',
+    fontSize: 16,
+    marginBottom: 5,
+  },
+  scoreValue: {
+    color: 'white',
+    fontSize: 36,
+    fontWeight: 'bold',
+  },
+  reviewDeviceInfo: {
+    backgroundColor: '#e9ecef',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  reviewDeviceTitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  reviewDeviceName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: Colors.lightNavalBlue,
   },
   recordingReview: {
     flexDirection: 'row',
@@ -1098,5 +1686,3 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-
-export default TestScreen;

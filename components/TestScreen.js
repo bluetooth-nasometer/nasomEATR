@@ -853,14 +853,13 @@ const TestScreen = ({ navigation, route }) => {
         <Text style={styles.sectionTitle}>Audio Input Device</Text>
         
         <Text style={styles.instructions}>
-          Please select a stereo audio device for recording. The device should have two microphones:
-          one positioned near the nose and one near the mouth for accurate nasalance measurement.
+          Please select a stereo audio device for recording.
         </Text>
         
         {selectedDevice ? (
           <View style={styles.selectedDeviceContainer}>
             <View style={styles.deviceIconLarge}>
-              {selectedDevice.type === 'usb' && <Ionicons name="usb" size={24} color="#fff" />}
+              {selectedDevice.type === 'usb' && <Ionicons name="headset" size={24} color="#fff" />}
               {selectedDevice.type === 'bluetooth' && <Ionicons name="bluetooth" size={24} color="#fff" />}
               {selectedDevice.type === 'builtin' && <Ionicons name="mic" size={24} color="#fff" />}
               {selectedDevice.type === 'wired' && <Ionicons name="headset" size={24} color="#fff" />}
@@ -896,7 +895,7 @@ const TestScreen = ({ navigation, route }) => {
         <View style={styles.deviceTips}>
           <Text style={styles.deviceTipsTitle}>Tips for Best Results:</Text>
           
-          <View style={styles.tipContainer}>
+          {/* <View style={styles.tipContainer}>
             <Ionicons name="information-circle-outline" size={18} color={Colors.lightNavalBlue} />
             <Text style={styles.tipText}>Use a stereo microphone like the DJI Mic 2</Text>
           </View>
@@ -904,7 +903,7 @@ const TestScreen = ({ navigation, route }) => {
           <View style={styles.tipContainer}>
             <Ionicons name="information-circle-outline" size={18} color={Colors.lightNavalBlue} />
             <Text style={styles.tipText}>Position one microphone near the nose and one near the mouth</Text>
-          </View>
+          </View> */}
           
           <View style={styles.tipContainer}>
             <Ionicons name="information-circle-outline" size={18} color={Colors.lightNavalBlue} />

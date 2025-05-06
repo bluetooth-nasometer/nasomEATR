@@ -757,204 +757,171 @@ public class EnhancedAudioModule extends ReactContextBaseJavaModule {
         audioProcessingExecutor.execute(new Runnable() {
             @Override
             public void run() {
+                FileInputStream fis = null;
+                FileOutputStream leftOS = null;
+                FileOutputStream rightOS = null;
+                
                 try {
-                    // Normalize all paths and ensure WAV extension
-                    final String normalizedStereoPath = normalizeFilePath(stereoFilePath);
-                    final String normalizedLeftPath = ensureWavExtension(normalizeFilePath(leftFilePath));
-                    final String normalizedRightPath = ensureWavExtension(normalizeFilePath(rightFilePath));
+                    // Normalize paths - just remove file:// prefix
+                    String normalizedStereoPath = normalizeFilePath(stereoFilePath);
+                    String normalizedLeftPath = normalizeFilePath(leftFilePath);
+                    String normalizedRightPath = normalizeFilePath(rightFilePath);
+                    
+                    // Always ensure WAV extension for output files
+                    normalizedLeftPath = ensureWavExtension(normalizedLeftPath);
+                    normalizedRightPath = ensureWavExtension(normalizedRightPath);
                     
                     Log.d(TAG, "Splitting stereo file: " + normalizedStereoPath);
                     Log.d(TAG, "Output paths - Left: " + normalizedLeftPath + ", Right: " + normalizedRightPath);
                     
-                    // First verify the stereo file exists
+                    // Check input file
                     File stereoFile = new File(normalizedStereoPath);
                     if (!stereoFile.exists()) {
-                        Log.e(TAG, "Stereo file does not exist: " + normalizedStereoPath);
+                        String errMsg = "Stereo file does not exist: " + normalizedStereoPath;
+                        Log.e(TAG, errMsg);
                         reactContext.runOnUiQueueThread(new Runnable() {
                             @Override
                             public void run() {
-                                promise.reject(E_PROCESSING_ERROR, "Stereo file does not exist: " + normalizedStereoPath);
+                                promise.reject(E_PROCESSING_ERROR, errMsg);
                             }
                         });
                         return;
                     }
                     
-                    if (stereoFile.length() == 0) {
-                        Log.e(TAG, "Stereo file is empty: " + normalizedStereoPath + ", size: " + stereoFile.length());
-                        reactContext.runOnUiQueueThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                promise.reject(E_PROCESSING_ERROR, "Stereo file is empty: " + normalizedStereoPath);
-                            }
-                        });
-                        return;
-                    }
-                    
-                    Log.d(TAG, "Stereo file verified, size: " + stereoFile.length() + " bytes");
-                    
-                    // Create the output files
+                    // Create directories for output files
                     File leftFile = new File(normalizedLeftPath);
                     File rightFile = new File(normalizedRightPath);
-                    
-                    // Make sure parent directories exist
                     leftFile.getParentFile().mkdirs();
                     rightFile.getParentFile().mkdirs();
                     
-                    // Parse WAV file
-                    FileInputStream fis = new FileInputStream(stereoFile);
+                    // Read WAV file header
+                    fis = new FileInputStream(stereoFile);
+                    byte[] header = new byte[44]; // Standard WAV header
+                    fis.read(header);
                     
-                    // Skip WAV header to get to PCM data
-                    byte[] headerBuffer = new byte[44]; // Standard WAV header is 44 bytes
-                    fis.read(headerBuffer);
-                    
-                    // Check if it's a valid WAV file with PCM format
-                    if (!new String(headerBuffer, 0, 4).equals("RIFF") || 
-                        !new String(headerBuffer, 8, 4).equals("WAVE") ||
-                        !new String(headerBuffer, 12, 4).equals("fmt ")) {
-                        Log.e(TAG, "Not a valid WAV file: " + normalizedStereoPath);
+                    // Verify WAV format
+                    if (!new String(header, 0, 4).equals("RIFF") || 
+                        !new String(header, 8, 4).equals("WAVE")) {
                         fis.close();
+                        String errMsg = "Input is not a valid WAV file: " + normalizedStereoPath;
+                        Log.e(TAG, errMsg);
                         reactContext.runOnUiQueueThread(new Runnable() {
                             @Override
                             public void run() {
-                                promise.reject(E_PROCESSING_ERROR, "Not a valid WAV file: " + normalizedStereoPath);
+                                promise.reject(E_PROCESSING_ERROR, errMsg);
                             }
                         });
                         return;
                     }
                     
-                    // Parse format chunk to get channels, sample rate, etc.
-                    int channels = headerBuffer[22] & 0xFF | (headerBuffer[23] & 0xFF) << 8;
-                    int sampleRate = headerBuffer[24] & 0xFF | 
-                                   (headerBuffer[25] & 0xFF) << 8 | 
-                                   (headerBuffer[26] & 0xFF) << 16 | 
-                                   (headerBuffer[27] & 0xFF) << 24;
-                    int bitsPerSample = headerBuffer[34] & 0xFF | (headerBuffer[35] & 0xFF) << 8;
-                    
-                    Log.d(TAG, "WAV file properties - Channels: " + channels + 
-                               ", Sample Rate: " + sampleRate + 
-                               ", Bits per Sample: " + bitsPerSample);
+                    // Extract WAV parameters
+                    int channels = header[22] & 0xFF | (header[23] & 0xFF) << 8;
+                    int sampleRate = header[24] & 0xFF | 
+                                   (header[25] & 0xFF) << 8 | 
+                                   (header[26] & 0xFF) << 16 | 
+                                   (header[27] & 0xFF) << 24;
+                    int bitsPerSample = header[34] & 0xFF | (header[35] & 0xFF) << 8;
                     
                     if (channels != 2) {
-                        Log.e(TAG, "Not a stereo WAV file (channels: " + channels + ")");
                         fis.close();
+                        String errMsg = "Not a stereo WAV file (channels: " + channels + ")";
+                        Log.e(TAG, errMsg);
                         reactContext.runOnUiQueueThread(new Runnable() {
                             @Override
                             public void run() {
-                                promise.reject(E_PROCESSING_ERROR, "Not a stereo WAV file. Channels: " + channels);
+                                promise.reject(E_PROCESSING_ERROR, errMsg);
                             }
                         });
                         return;
                     }
                     
-                    // Find data chunk - may not be immediately after format chunk
-                    boolean foundDataChunk = false;
-                    byte[] chunkHeader = new byte[8]; // 4 bytes ID, 4 bytes size
+                    // Skip to the data chunk
+                    boolean foundData = false;
+                    int dataSize = 0;
+                    byte[] chunkHeader = new byte[8];
                     
-                    // Skip any non-data chunks between fmt and data
-                    while (!foundDataChunk) {
-                        int bytesRead = fis.read(chunkHeader);
-                        if (bytesRead < 8) {
-                            Log.e(TAG, "Unexpected end of file while looking for data chunk");
-                            fis.close();
-                            reactContext.runOnUiQueueThread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    promise.reject(E_PROCESSING_ERROR, "Invalid WAV file format - no data chunk found");
-                                }
-                            });
-                            return;
-                        }
+                    // Reset to beginning of file
+                    fis.close();
+                    fis = new FileInputStream(stereoFile);
+                    fis.skip(12); // Skip "RIFF", size, and "WAVE"
+                    
+                    while (!foundData) {
+                        if (fis.read(chunkHeader) < 8) break;
                         
-                        if (new String(chunkHeader, 0, 4).equals("data")) {
-                            foundDataChunk = true;
-                            break;
-                        }
-                        
-                        // Skip this chunk
-                        int chunkSize = chunkHeader[4] & 0xFF | 
-                                      (chunkHeader[5] & 0xFF) << 8 | 
-                                      (chunkHeader[6] & 0xFF) << 16 | 
-                                      (chunkHeader[7] & 0xFF) << 24;
-                        fis.skip(chunkSize);
-                    }
-                    
-                    if (!foundDataChunk) {
-                        Log.e(TAG, "No data chunk found in WAV file");
-                        fis.close();
-                        reactContext.runOnUiQueueThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                promise.reject(E_PROCESSING_ERROR, "Invalid WAV file format - no data chunk found");
-                            }
-                        });
-                        return;
-                    }
-                    
-                    // Get data chunk size
-                    int dataSize = chunkHeader[4] & 0xFF | 
+                        String id = new String(chunkHeader, 0, 4);
+                        int size = chunkHeader[4] & 0xFF | 
                                  (chunkHeader[5] & 0xFF) << 8 | 
                                  (chunkHeader[6] & 0xFF) << 16 | 
                                  (chunkHeader[7] & 0xFF) << 24;
-                    
-                    Log.d(TAG, "Data chunk size: " + dataSize + " bytes");
-                    
-                    // Read the PCM data
-                    byte[] audioData = new byte[dataSize];
-                    fis.read(audioData);
-                    fis.close();
-                    
-                    // Create byte buffers for each channel
-                    int monoDataSize = dataSize / 2; // Split stereo data in half for mono
-                    byte[] leftData = new byte[monoDataSize];
-                    byte[] rightData = new byte[monoDataSize];
-                    
-                    // Separate the channels - for 16-bit stereo, data is interleaved as L1 R1 L2 R2...
-                    // Each sample is 2 bytes (16 bits)
-                    int byteDepth = bitsPerSample / 8;
-                    int leftIdx = 0, rightIdx = 0;
-                    
-                    for (int i = 0; i < dataSize; i += byteDepth * 2) { // 2 channels
-                        // Copy bytes for left channel sample
-                        for (int b = 0; b < byteDepth; b++) {
-                            leftData[leftIdx++] = audioData[i + b];
-                        }
                         
-                        // Copy bytes for right channel sample
-                        for (int b = 0; b < byteDepth; b++) {
-                            rightData[rightIdx++] = audioData[i + byteDepth + b];
+                        if (id.equals("data")) {
+                            foundData = true;
+                            dataSize = size;
+                        } else {
+                            // Skip this chunk
+                            fis.skip(size);
                         }
                     }
                     
-                    Log.d(TAG, "Separated stereo data into mono channels. " +
-                               "Left size: " + leftData.length + " bytes, " +
-                               "Right size: " + rightData.length + " bytes");
+                    if (!foundData) {
+                        fis.close();
+                        String errMsg = "No data chunk found in WAV file";
+                        Log.e(TAG, errMsg);
+                        reactContext.runOnUiQueueThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                promise.reject(E_PROCESSING_ERROR, errMsg);
+                            }
+                        });
+                        return;
+                    }
                     
-                    // Write left channel WAV file
-                    FileOutputStream leftOS = new FileOutputStream(leftFile);
-                    writeWavHeader(leftOS, 1, sampleRate, bitsPerSample, leftData.length);
-                    leftOS.write(leftData);
+                    // Create output files
+                    leftOS = new FileOutputStream(leftFile);
+                    rightOS = new FileOutputStream(rightFile);
+                    
+                    // Write WAV headers for mono files
+                    writeWavHeader(leftOS, 1, sampleRate, bitsPerSample, dataSize / 2);
+                    writeWavHeader(rightOS, 1, sampleRate, bitsPerSample, dataSize / 2);
+                    
+                    // Split stereo data into two mono channels
+                    int bytesPerSample = bitsPerSample / 8;
+                    byte[] buffer = new byte[bytesPerSample * 2]; // One stereo frame
+                    int framesRead = 0;
+                    int bytesRead;
+                    
+                    while ((bytesRead = fis.read(buffer)) == buffer.length) {
+                        // Write left channel
+                        leftOS.write(buffer, 0, bytesPerSample);
+                        
+                        // Write right channel
+                        rightOS.write(buffer, bytesPerSample, bytesPerSample);
+                        
+                        framesRead++;
+                    }
+                    
+                    // Close all streams
+                    fis.close();
                     leftOS.close();
-                    
-                    // Write right channel WAV file
-                    FileOutputStream rightOS = new FileOutputStream(rightFile);
-                    writeWavHeader(rightOS, 1, sampleRate, bitsPerSample, rightData.length);
-                    rightOS.write(rightData);
                     rightOS.close();
                     
-                    Log.d(TAG, "Split completed successfully");
-                    Log.d(TAG, "Left file size: " + leftFile.length() + " bytes");
-                    Log.d(TAG, "Right file size: " + rightFile.length() + " bytes");
+                    Log.d(TAG, "Split completed successfully, processed " + framesRead + " frames");
+                    Log.d(TAG, "Left file: " + leftFile.length() + " bytes, Right file: " + rightFile.length() + " bytes");
                     
-                    // Return result with original paths (not normalized)
+                    // Return paths that match the actual file extensions created
+                    String outputLeftPath = ensureWavExtension(leftFilePath);
+                    String outputRightPath = ensureWavExtension(rightFilePath);
+                    
                     reactContext.runOnUiQueueThread(new Runnable() {
                         @Override
                         public void run() {
                             WritableMap result = Arguments.createMap();
-                            result.putString("leftPath", leftFilePath);
-                            result.putString("rightPath", rightFilePath);
+                            result.putString("leftPath", outputLeftPath);
+                            result.putString("rightPath", outputRightPath);
                             promise.resolve(result);
                         }
                     });
+                    
                 } catch (final Exception e) {
                     Log.e(TAG, "Error splitting stereo audio: " + e.getMessage(), e);
                     reactContext.runOnUiQueueThread(new Runnable() {
@@ -963,6 +930,14 @@ public class EnhancedAudioModule extends ReactContextBaseJavaModule {
                             promise.reject(E_PROCESSING_ERROR, "Failed to split stereo audio: " + e.getMessage());
                         }
                     });
+                } finally {
+                    try {
+                        if (fis != null) fis.close();
+                        if (leftOS != null) leftOS.close();
+                        if (rightOS != null) rightOS.close();
+                    } catch (IOException e) {
+                        Log.e(TAG, "Error closing streams", e);
+                    }
                 }
             }
         });
@@ -973,6 +948,8 @@ public class EnhancedAudioModule extends ReactContextBaseJavaModule {
         audioProcessingExecutor.execute(new Runnable() {
             @Override
             public void run() {
+                FileInputStream fis = null;
+                
                 try {
                     // Normalize the file path
                     final String normalizedPath = normalizeFilePath(audioFilePath);
@@ -1002,21 +979,18 @@ public class EnhancedAudioModule extends ReactContextBaseJavaModule {
                         return;
                     }
                     
-                    Log.d(TAG, "Audio file verified, size: " + audioFile.length() + " bytes");
-                    
                     // Parse WAV file
-                    FileInputStream fis = new FileInputStream(audioFile);
+                    fis = new FileInputStream(audioFile);
                     
                     // Skip WAV header to get to PCM data
                     byte[] headerBuffer = new byte[44]; // Standard WAV header is 44 bytes
                     fis.read(headerBuffer);
                     
-                    // Check if it's a valid WAV file with PCM format
+                    // Verify it's a WAV file with PCM format
                     if (!new String(headerBuffer, 0, 4).equals("RIFF") || 
-                        !new String(headerBuffer, 8, 4).equals("WAVE") ||
-                        !new String(headerBuffer, 12, 4).equals("fmt ")) {
-                        Log.e(TAG, "Not a valid WAV file: " + normalizedPath);
+                        !new String(headerBuffer, 8, 4).equals("WAVE")) {
                         fis.close();
+                        Log.e(TAG, "Not a valid WAV file: " + normalizedPath);
                         reactContext.runOnUiQueueThread(new Runnable() {
                             @Override
                             public void run() {
@@ -1031,18 +1005,22 @@ public class EnhancedAudioModule extends ReactContextBaseJavaModule {
                     int bitsPerSample = headerBuffer[34] & 0xFF | (headerBuffer[35] & 0xFF) << 8;
                     
                     Log.d(TAG, "WAV file properties - Channels: " + channels + 
-                               ", Bits per Sample: " + bitsPerSample);
+                            ", Bits Per Sample: " + bitsPerSample);
                     
-                    // Find data chunk
+                    // Find data chunk - reset file position and skip RIFF header
+                    fis.close();
+                    fis = new FileInputStream(audioFile);
+                    fis.skip(12); // Skip "RIFF", size, and "WAVE"
+                    
                     boolean foundDataChunk = false;
                     byte[] chunkHeader = new byte[8]; // 4 bytes ID, 4 bytes size
+                    int dataSize = 0;
                     
-                    // Skip any non-data chunks between fmt and data
+                    // Find the data chunk
                     while (!foundDataChunk) {
-                        int bytesRead = fis.read(chunkHeader);
-                        if (bytesRead < 8) {
-                            Log.e(TAG, "Unexpected end of file while looking for data chunk");
+                        if (fis.read(chunkHeader) < 8) {
                             fis.close();
+                            Log.e(TAG, "Failed to find data chunk");
                             reactContext.runOnUiQueueThread(new Runnable() {
                                 @Override
                                 public void run() {
@@ -1052,22 +1030,24 @@ public class EnhancedAudioModule extends ReactContextBaseJavaModule {
                             return;
                         }
                         
-                        if (new String(chunkHeader, 0, 4).equals("data")) {
-                            foundDataChunk = true;
-                            break;
-                        }
+                        String id = new String(chunkHeader, 0, 4);
+                        int size = chunkHeader[4] & 0xFF | 
+                                (chunkHeader[5] & 0xFF) << 8 | 
+                                (chunkHeader[6] & 0xFF) << 16 | 
+                                (chunkHeader[7] & 0xFF) << 24;
                         
-                        // Skip this chunk
-                        int chunkSize = chunkHeader[4] & 0xFF | 
-                                      (chunkHeader[5] & 0xFF) << 8 | 
-                                      (chunkHeader[6] & 0xFF) << 16 | 
-                                      (chunkHeader[7] & 0xFF) << 24;
-                        fis.skip(chunkSize);
+                        if (id.equals("data")) {
+                            foundDataChunk = true;
+                            dataSize = size;
+                        } else {
+                            // Skip this chunk
+                            fis.skip(size);
+                        }
                     }
                     
                     if (!foundDataChunk) {
-                        Log.e(TAG, "No data chunk found in WAV file");
                         fis.close();
+                        Log.e(TAG, "No data chunk found");
                         reactContext.runOnUiQueueThread(new Runnable() {
                             @Override
                             public void run() {
@@ -1077,84 +1057,71 @@ public class EnhancedAudioModule extends ReactContextBaseJavaModule {
                         return;
                     }
                     
-                    // Get data chunk size
-                    int dataSize = chunkHeader[4] & 0xFF | 
-                                 (chunkHeader[5] & 0xFF) << 8 | 
-                                 (chunkHeader[6] & 0xFF) << 16 | 
-                                 (chunkHeader[7] & 0xFF) << 24;
+                    Log.d(TAG, "Found data chunk with size: " + dataSize + " bytes");
                     
-                    Log.d(TAG, "Data chunk size: " + dataSize + " bytes");
-                    
-                    // Read the PCM data for RMS calculation
-                    int byteDepth = bitsPerSample / 8;
-                    int sampleCount = dataSize / (byteDepth * channels);
-                    double sumSquares = 0;
-                    int samplesProcessed = 0;
-                    
-                    // For 16-bit audio (most common)
+                    // Calculate RMS for 16-bit audio (most common)
                     if (bitsPerSample == 16) {
-                        short[] samples = new short[1024]; // Process in chunks of 1024 samples
-                        byte[] buffer = new byte[1024 * byteDepth * channels];
+                        double sumSquares = 0;
+                        int samplesProcessed = 0;
+                        int bytesPerSample = bitsPerSample / 8;
+                        
+                        // Process in small chunks to save memory
+                        byte[] buffer = new byte[1024 * bytesPerSample];
                         int bytesRead;
                         
                         while ((bytesRead = fis.read(buffer)) > 0) {
-                            ByteBuffer bb = ByteBuffer.wrap(buffer, 0, bytesRead);
-                            bb.order(ByteOrder.LITTLE_ENDIAN);
-                            ShortBuffer sb = bb.asShortBuffer();
+                            int samplesInBuffer = bytesRead / bytesPerSample;
                             
-                            int shortsRead = bytesRead / 2; // 2 bytes per short
-                            sb.get(samples, 0, Math.min(shortsRead, samples.length));
-                            
-                            // If stereo, only use one channel for RMS
-                            int inc = channels;
-                            for (int i = 0; i < shortsRead; i += inc) {
-                                short sample = samples[i];
+                            for (int i = 0; i < samplesInBuffer; i++) {
+                                int sampleOffset = i * bytesPerSample;
+                                
+                                // Convert bytes to short (16-bit sample)
+                                short sample = (short) ((buffer[sampleOffset + 1] & 0xff) << 8 | 
+                                                    (buffer[sampleOffset] & 0xff));
+                                
                                 sumSquares += sample * sample;
                                 samplesProcessed++;
                             }
                         }
+                        
+                        if (samplesProcessed == 0) {
+                            Log.e(TAG, "No samples processed for RMS calculation");
+                            reactContext.runOnUiQueueThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    promise.reject(E_PROCESSING_ERROR, "No valid samples found for RMS calculation");
+                                }
+                            });
+                            return;
+                        }
+                        
+                        // Calculate RMS (Root Mean Square)
+                        double rms = Math.sqrt(sumSquares / samplesProcessed);
+                        
+                        // Normalize to 0-1 range (16-bit PCM has range -32768 to 32767)
+                        double normalizedRms = rms / 32768.0;
+                        
+                        Log.d(TAG, "Calculated RMS: " + normalizedRms + " from " + samplesProcessed + " samples");
+                        
+                        // Return result
+                        final double finalRms = normalizedRms;
+                        reactContext.runOnUiQueueThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                promise.resolve(finalRms);
+                            }
+                        });
                     } else {
                         // Skip other bit depths for simplicity
                         Log.e(TAG, "Unsupported bit depth: " + bitsPerSample);
-                        fis.close();
                         reactContext.runOnUiQueueThread(new Runnable() {
                             @Override
                             public void run() {
                                 promise.reject(E_PROCESSING_ERROR, "Unsupported bit depth: " + bitsPerSample);
                             }
                         });
-                        return;
                     }
                     
-                    fis.close();
-                    
-                    if (samplesProcessed == 0) {
-                        Log.e(TAG, "No samples processed for RMS calculation");
-                        reactContext.runOnUiQueueThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                promise.reject(E_PROCESSING_ERROR, "No valid samples found for RMS calculation");
-                            }
-                        });
-                        return;
-                    }
-                    
-                    // Calculate RMS (Root Mean Square)
-                    double rms = Math.sqrt(sumSquares / samplesProcessed);
-                    
-                    // Normalize to 0-1 range (16-bit PCM has range -32768 to 32767)
-                    double normalizedRms = rms / 32768.0;
-                    
-                    Log.d(TAG, "Calculated RMS: " + normalizedRms + " from " + samplesProcessed + " samples");
-                    
-                    // Return result
-                    final double finalRms = normalizedRms;
-                    reactContext.runOnUiQueueThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            promise.resolve(finalRms);
-                        }
-                    });
                 } catch (final Exception e) {
                     Log.e(TAG, "Error calculating RMS: " + e.getMessage(), e);
                     reactContext.runOnUiQueueThread(new Runnable() {
@@ -1163,6 +1130,12 @@ public class EnhancedAudioModule extends ReactContextBaseJavaModule {
                             promise.reject(E_PROCESSING_ERROR, "Failed to calculate RMS: " + e.getMessage());
                         }
                     });
+                } finally {
+                    try {
+                        if (fis != null) fis.close();
+                    } catch (IOException e) {
+                        Log.e(TAG, "Error closing file stream", e);
+                    }
                 }
             }
         });

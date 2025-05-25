@@ -26,39 +26,63 @@ const EditPatientScreen = ({ route, navigation }) => {
   const [country, setCountry] = useState(patient.country || '');
 
   const handleDateChange = (text, type) => {
-    validateDate(text, type);
+    // actually call setBirthDate instead of validateDate(text, type);
+    setBirthDate(prev => ({ ...prev, [type]: text }));
   };
 
   const validateDate = (text, type) => {
-    const num = parseInt(text);
-    let isValid = false;
-    
-    switch (type) {
-      case 'year':
-        if (num > 0 && num <= new Date().getFullYear()) {
-          setBirthDate(prev => ({ ...prev, year: text }));
-          isValid = true;
-        }
-        break;
-      case 'month':
-        if (num >= 1 && num <= 12) {
-          setBirthDate(prev => ({ ...prev, month: text.padStart(2, '0') }));
-          isValid = true;
-        }
-        break;
-      case 'day':
-        if (num >= 1 && num <= 31) {
-          setBirthDate(prev => ({ ...prev, day: text.padStart(2, '0') }));
-          isValid = true;
-        }
-        break;
+    const year = parseInt(birthDate.year);
+    const month = parseInt(birthDate.month);
+    const day = parseInt(birthDate.day);
+    const currentYear = new Date().getFullYear();
+
+    // Check if all fields have values and are numbers
+    if (!birthDate.year.trim() || !birthDate.month.trim() || !birthDate.day.trim()) {
+      return { isValid: false, message: 'Please enter a complete date of birth' };
     }
-    return isValid;
+
+    if (isNaN(year) || isNaN(month) || isNaN(day)) {
+      return { isValid: false, message: 'Please enter valid numbers for the date' };
+    }
+
+    // Validate ranges; switched from using switch to if
+    if (year < 1900 || year > currentYear) {
+      return { isValid: false, message: `Please enter a valid year (1900-${currentYear})` };
+    }
+
+    if (month < 1 || month > 12) {
+      return { isValid: false, message: 'Please enter a valid month (1-12)' };
+    }
+
+    if (day < 1 || day > 31) {
+      return { isValid: false, message: 'Please enter a valid day (1-31)' };
+    }
+
+    // Try to create a valid date
+    try {
+      const testDate = new Date(year, month - 1, day);
+      if (testDate.getFullYear() !== year ||
+          testDate.getMonth() !== month - 1 ||
+          testDate.getDate() !== day) {
+        return { isValid: false, message: 'Please enter a valid date' };
+      }
+    } catch (error) {
+      return { isValid: false, message: 'Please enter a valid date' };
+    }
+
+    return { isValid: true };
   };
 
   const handleSave = async () => {
-    if (!name || !gender || !birthDate.year || !birthDate.month || !birthDate.day) {
+    if (!name || !gender) {
       Alert.alert('Error', 'Please fill in all required fields');
+      return;
+    }
+
+    // call validation here
+    const dateValidation = validateDate();
+    if (!dateValidation.isValid) {
+      Alert.alert('Error', dateValidation.message);
       return;
     }
 

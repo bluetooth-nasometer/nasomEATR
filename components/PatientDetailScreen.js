@@ -154,10 +154,57 @@ const PatientDetailScreen = ({ route, navigation }) => {
     });
   };
 
-  const formatDuration = (seconds) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+//const formatDuration = (seconds) => {
+//  // Handle null, undefined, or invalid values
+//  if (!seconds || seconds === 0 || isNaN(seconds)) {
+//    return 'N/A';
+//  }
+//
+//  const totalSeconds = Math.round(seconds); // round to nearest whole second just for display
+//  const minutes = Math.floor(totalSeconds / 60);
+//  const remainingSeconds = totalSeconds % 60;
+//
+//  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+//};
+
+// Alt approach - show decimal seconds as total second & minutes:
+const formatDurationAlt = (seconds) => {
+  if (!seconds || seconds === 0 || isNaN(seconds)) {
+    return 'N/A';
+  }
+
+  // under 60 seconds, show seconds with 1 decimal
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)}s`;
+  }
+
+  //  convert to minutes:seconds for longer durations
+  const totalSeconds = Math.round(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
+
+  const getDuration = (test) => {
+    // Handle if nasalance_data is already an object
+    if (test.nasalance_data && typeof test.nasalance_data === 'object') {
+      return test.nasalance_data.duration || 0;
+    }
+
+    // Handle if nasalance_data is a JSON string that needs parsing
+    if (test.nasalance_data && typeof test.nasalance_data === 'string') {
+      try {
+        const parsed = JSON.parse(test.nasalance_data);
+        return parsed.duration || 0;
+      } catch (e) {
+        console.warn('(PatientDetailScreen - getDuration)Failed to parse nasalance_data:', e);
+        return 0;
+      }
+    }
+
+    // Fallback
+    return test.duration || 0;
   };
 
   const showEditOptions = () => {
@@ -412,7 +459,7 @@ const PatientDetailScreen = ({ route, navigation }) => {
                 <View style={styles.testInfo}>
                   <Text style={styles.testDate}>{formatDate(test.created_at)}</Text>
                   <Text style={styles.testDetails}>
-                    Duration: {formatDuration(test.duration || 0)} • 
+                    Duration: {formatDurationAlt(getDuration(test))} •
                     Nasalance: {test.avg_nasalance_score?.toFixed(1) || 'N/A'}%
                   </Text>
                 </View>

@@ -526,7 +526,7 @@ const formatDurationAlt = (seconds) => {
           {loading ? (
             <LoadingIndicator text="Loading tests..." />
           ) : testHistory.length === 0 ? (
-            <View style={styles.emptyStateContainer}>
+            <View style={styles.chartPlaceholder}>
               <Ionicons name="document-text-outline" size={48} color="#666" />
               <Text style={styles.emptyStateText}>No tests recorded yet</Text>
               <Text style={styles.emptyStateSubtext}>

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { StatusBar } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -13,7 +14,6 @@ import ProfileScreen from './components/ProfileScreen';
 import AddPatientScreen from './components/AddPatientScreen';
 import PatientDetailScreen from './components/PatientDetailScreen';
 import EditPatientScreen from './components/EditPatientScreen';
-import CalibrationScreen from './components/CalibrationScreen';
 import TestScreen from './components/TestScreen';
 import TestDetailScreen from './components/TestDetailScreen';
 
@@ -24,6 +24,7 @@ export default function App() {
   
   return (
     <SafeAreaProvider>
+      <StatusBar barStyle="dark-content"/>
       <NavigationContainer>
         <Stack.Navigator
           screenOptions={{ headerShown: false }}
@@ -37,7 +38,6 @@ export default function App() {
           <Stack.Screen name="AddPatient" component={AddPatientScreen} />
           <Stack.Screen name="PatientDetail" component={PatientDetailScreen} />
           <Stack.Screen name="EditPatient" component={EditPatientScreen} />
-          <Stack.Screen name="Calibration" component={CalibrationScreen} />
           <Stack.Screen name="Test" component={TestScreen} />
           <Stack.Screen name="TestDetail" component={TestDetailScreen} />
         </Stack.Navigator>

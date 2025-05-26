@@ -1008,7 +1008,7 @@ const TestScreen = ({ navigation, route }) => {
   
   const renderReview = () => {
   // Check if MRN is available and valid
-  const isMrnValid = patient?.mrn && patient.mrn !== 'N/A' && patient.mrn.trim() !== '';
+  const isMrnValid = patient?.mrn && patient.mrn !== 'N/A' && patient.mrn !== '';
   
   return (
     <View style={styles.reviewContainer}>

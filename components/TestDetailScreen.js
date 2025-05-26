@@ -328,7 +328,7 @@ const TestDetailScreen = ({ route, navigation }) => {
         </View>
 
         {/* Placeholder for future features */}
-        <View style={styles.placeholderCard}>
+        {/* <View style={styles.placeholderCard}>
           <View style={styles.placeholderHeader}>
             <Text style={styles.sectionTitle}>Nasalance Graph</Text>
           </View>
@@ -338,7 +338,7 @@ const TestDetailScreen = ({ route, navigation }) => {
               Detailed analysis will be available in future updates
             </Text>
           </View>
-        </View>
+        </View> */}
       </ScrollView>
     </View>
   );

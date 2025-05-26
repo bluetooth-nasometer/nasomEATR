@@ -55,20 +55,19 @@ const ProfileScreen = ({ navigation }) => {
 
   const settingsSections = [
     {
-      label: 'Device Settings',
-      icon: 'bluetooth',
+      label: 'Hardware',
+      icon: 'hardware-chip-outline',
       items: [
-        { 
-          icon: 'options-outline', 
-          text: 'Calibration Settings', 
-          onPress: () => navigation.navigate('Calibration'),
-          badge: 'Required'
-        },
+        // { 
+        //   icon: 'options-outline', 
+        //   text: 'Calibration Settings', 
+        //   onPress: () => navigation.navigate('Calibration'),
+        //   badge: 'Required'
+        // },
         { 
           icon: 'mic-outline', 
-          text: 'Recording Settings',
+          text: 'Test Microphones',
           onPress: () => navigation.navigate('Test'),
-          badge: 'Required'
         }
       ]
     },
@@ -78,25 +77,25 @@ const ProfileScreen = ({ navigation }) => {
       items: [
         { icon: 'person-outline', text: 'Edit Profile', chevron: true },
         { icon: 'lock-closed-outline', text: 'Change Password', chevron: true },
-        { icon: 'notifications-outline', text: 'Notifications', chevron: true }
+        // { icon: 'notifications-outline', text: 'Notifications', chevron: true }
       ]
     },
-    {
-      label: 'Data Management',
-      icon: 'server',
-      items: [
-        { icon: 'download-outline', text: 'Export Patient Data', chevron: true },
-        { icon: 'sync-outline', text: 'Backup Settings', chevron: true }
-      ]
-    },
-    {
-      label: 'Help & Info',
-      icon: 'information-circle',
-      items: [
-        { icon: 'help-circle-outline', text: 'User Guide', chevron: true },
-        { icon: 'information-circle-outline', text: 'About nasomEATR', chevron: true }
-      ]
-    }
+    // {
+    //   label: 'Data Management',
+    //   icon: 'server',
+    //   items: [
+    //     { icon: 'download-outline', text: 'Export Patient Data', chevron: true },
+    //     { icon: 'sync-outline', text: 'Backup Settings', chevron: true }
+    //   ]
+    // },
+    // {
+    //   label: 'Help & Info',
+    //   icon: 'information-circle',
+    //   items: [
+    //     { icon: 'help-circle-outline', text: 'User Guide', chevron: true },
+    //     { icon: 'information-circle-outline', text: 'About nasomEATR', chevron: true }
+    //   ]
+    // }
   ];
 
   if (loading) return <LoadingIndicator text="Loading profile..." fullScreen />;

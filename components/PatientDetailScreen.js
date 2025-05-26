@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { CSVLink, CSVDownload } from "react-csv"; // inserted for CSV export
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 import {
   View,
@@ -11,7 +12,9 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  Dimensions,
 } from 'react-native';
+import { LineChart } from 'react-native-chart-kit';
 import Colors from '../constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../utils/supabaseClient';
@@ -28,16 +31,23 @@ const PatientDetailScreen = ({ route, navigation }) => {
   const [notes, setNotes] = useState(route.params.patient.notes || '');
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesChanged, setNotesChanged] = useState(false);
-
+  const [chartData, setChartData] = useState(null);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [csvData, setCsvData] = useState([
-    ["#", "Date Test was administered", "Average Nasalance"]
-  ]);
   
+  // Helper function to convert array to CSV string
+  const arrayToCSV = (data) => {
+    return data.map(row => 
+      row.map(field => 
+        typeof field === 'string' && field.includes(',') 
+          ? `"${field}"` 
+          : field
+      ).join(',')
+    ).join('\n');
+  };
+
   const handleExport = async () => {
     try {
-      // Start loading state
-      //setIsDownloading(true);
+      setIsDownloading(true);
       
       // Fetch all test data for this patient
       const { data, error } = await supabase
@@ -45,58 +55,65 @@ const PatientDetailScreen = ({ route, navigation }) => {
         .select('*')
         .eq('mrn', patientData.mrn)
         .order('created_at', { ascending: true });
-  
+
       if (error) throw error;
       
-      // Create a new array with headers
-      const newCsvData = [
+      // Create CSV data array
+      const csvData = [
         ["#", "Date Test was administered", "Average Nasalance"]
       ];
       
       let count = 1;
-      // Add each test record to the CSV data
       data.forEach(record => {
-        // Format the date for better readability
         const formattedDate = formatDate(record.created_at);
-        // Get nasalance score with 1 decimal place or 'N/A'
         const nasalance = record.avg_nasalance_score?.toFixed(1) || 'N/A';
-        newCsvData.push([count, formattedDate, nasalance]);
+        csvData.push([count, formattedDate, nasalance]);
         count++;
       });
-            // Update state with the new CSV data
-      setCsvData(newCsvData);
-      console.log('CSV data prepared:', newCsvData);
-      setIsDownloading(true);
-      // Keep isDownloading true to trigger the CSVDownload component
-      // The timeout will happen after data is prepared
-      setTimeout(() => setIsDownloading(false), 1000);
-      count = 1;
 
-    } 
-    catch (error) {
-      console.error('Error preparing CSV data:', error);
+      // Convert to CSV string
+      const csvString = arrayToCSV(csvData);
+      
+      // Create file path
+      const fileName = `patient_${patientData.mrn}_test_history.csv`;
+      const fileUri = FileSystem.documentDirectory + fileName;
+      
+      // Write CSV to file
+      await FileSystem.writeAsStringAsync(fileUri, csvString);
+      
+      // Share the file
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/csv',
+          dialogTitle: 'Export Patient Test History',
+          UTI: 'public.comma-separated-values-text'
+        });
+      } else {
+        Alert.alert('Success', `CSV file saved to: ${fileUri}`);
+      }
+      
+    } catch (error) {
+      console.error('Error exporting CSV:', error);
       Alert.alert('Error', 'Failed to export patient records');
-      setIsDownloading(false); // Make sure to reset loading state on error
-    } 
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   useEffect(() => {
     fetchTestHistory();
-    // Initialize notes from patient data
     setNotes(patientData.notes || '');
   }, []);
 
-  // Add debounced save function for notes
   useEffect(() => {
     if (notesChanged) {
-      const timeoutId = setTimeout(saveNotes, 1000); // 1 second delay
+      const timeoutId = setTimeout(saveNotes, 1000);
       return () => clearTimeout(timeoutId);
     }
   }, [notes]);
 
   const fetchTestHistory = async () => {
     try {
-      // Fetch all test data for this patient
       const { data, error } = await supabase
         .from('patient_data')
         .select('*')
@@ -105,11 +122,12 @@ const PatientDetailScreen = ({ route, navigation }) => {
 
       if (error) throw error;
 
-      // Calculate average nasalance from all tests
       if (data && data.length > 0) {
-        const totalNasalance = data.reduce((sum, test) => sum + (test.nasalance_score || 0), 0);
+        const totalNasalance = data.reduce((sum, test) => sum + (test.avg_nasalance_score || 0), 0);
         const avg = (totalNasalance / data.length).toFixed(1);
         setAverageNasalance(avg);
+        
+        prepareChartData(data.reverse());
       }
 
       setTestHistory(data || []);
@@ -119,6 +137,31 @@ const PatientDetailScreen = ({ route, navigation }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const prepareChartData = (tests) => {
+    if (!tests || tests.length === 0) {
+      setChartData(null);
+      return;
+    }
+
+    const recentTests = tests.slice(-10);
+    
+    const labels = recentTests.map((test, index) => {
+      const date = new Date(test.created_at);
+      return `${date.getMonth() + 1}/${date.getDate()}`;
+    });
+
+    const datasets = [{
+      data: recentTests.map(test => test.avg_nasalance_score || 0),
+      color: (opacity = 1) => `rgba(54, 162, 235, ${opacity})`,
+      strokeWidth: 3
+    }];
+
+    setChartData({
+      labels,
+      datasets
+    });
   };
 
   const saveNotes = async () => {
@@ -253,7 +296,6 @@ const formatDurationAlt = (seconds) => {
 
   const deletePatient = async () => {
     try {
-      // First delete patient's photo if exists
       if (patientData.picture_url) {
         const fileName = patientData.picture_url.split('/').pop();
         await supabase.storage
@@ -261,7 +303,6 @@ const formatDurationAlt = (seconds) => {
           .remove([fileName]);
       }
 
-      // Delete patient (this will cascade delete patient_data due to foreign key constraint)
       const { error } = await supabase
         .from('patient')
         .delete()
@@ -278,15 +319,13 @@ const formatDurationAlt = (seconds) => {
   };
 
   const getProfileImage = () => {
-    // Check that picture_url exists and is not null/empty
     if (patientData?.picture_url && patientData.picture_url.trim() !== '') {
       return { uri: patientData.picture_url };
     }
-    console.log('Using default photo'); // Debug log
+    console.log('Using default photo');
     return require('../assets/splash-icon.png');
   };
 
-  // Add a function to refresh patient data
   const refreshPatientData = async () => {
     try {
       const { data, error } = await supabase
@@ -297,7 +336,7 @@ const formatDurationAlt = (seconds) => {
 
       if (error) throw error;
       if (data) {
-        setPatientData(data); // Update the entire patient object
+        setPatientData(data);
         setNotes(data.notes || '');
       }
     } catch (error) {
@@ -305,7 +344,6 @@ const formatDurationAlt = (seconds) => {
     }
   };
 
-  // Add focus listener to refresh data when screen comes into focus
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       refreshPatientData();
@@ -314,7 +352,6 @@ const formatDurationAlt = (seconds) => {
     return unsubscribe;
   }, [navigation]);
 
-  // Add a demographic information section to display the new fields
   const renderDemographicInfo = () => {
     return (
       <View style={styles.sectionCard}>
@@ -352,12 +389,66 @@ const formatDurationAlt = (seconds) => {
     );
   };
 
+  const renderChart = () => {
+    if (!chartData || chartData.datasets[0].data.length === 0) {
+      return (
+        <View style={styles.chartPlaceholder}>
+          <Ionicons name="analytics-outline" size={48} color="#ccc" />
+          <Text style={styles.placeholderText}>No test data available</Text>
+          <Text style={styles.placeholderSubtext}>Complete a test to see the chart</Text>
+        </View>
+      );
+    }
+
+    const screenWidth = Dimensions.get('window').width;
+    const chartWidth = screenWidth - 80;
+
+    return (
+      <View style={styles.chartContainer}>
+        <LineChart
+          data={chartData}
+          width={chartWidth}
+          height={220}
+          chartConfig={{
+            backgroundColor: '#ffffff',
+            backgroundGradientFrom: '#ffffff',
+            backgroundGradientTo: '#ffffff',
+            decimalPlaces: 1,
+            color: (opacity = 1) => `rgba(54, 162, 235, ${opacity})`,
+            labelColor: (opacity = 1) => `rgba(102, 102, 102, ${opacity})`,
+            style: {
+              borderRadius: 16,
+            },
+            propsForDots: {
+              r: '6',
+              strokeWidth: '2',
+              stroke: '#36A2EB'
+            },
+            propsForBackgroundLines: {
+              strokeDasharray: '',
+              stroke: '#e0e0e0',
+              strokeWidth: 1
+            }
+          }}
+          bezier
+          style={styles.chart}
+          withInnerLines={true}
+          withOuterLines={true}
+          withVerticalLines={true}
+          withHorizontalLines={true}
+          fromZero={false}
+          yAxisSuffix="%"
+          yAxisInterval={1}
+        />
+        <Text style={styles.chartCaption}>Last {Math.min(chartData.labels.length, 10)} tests</Text>
+      </View>
+    );
+  };
+
   const startNewTest = () => {
-    // Create mock device information since we're bypassing calibration
     const mockNasalMic = { name: 'Mock Nasal Microphone', id: 'nasal-mock-id' };
     const mockOralMic = { name: 'Mock Oral Microphone', id: 'oral-mock-id' };
     
-    // Navigate directly to TestScreen with all required parameters
     navigation.navigate('Test', { 
       patient: patientData, 
       nasalMic: mockNasalMic, 
@@ -392,7 +483,6 @@ const formatDurationAlt = (seconds) => {
           formatDate={formatDate}
         />
 
-        {/* Stats Card */}
         <View style={styles.statsCard}>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{testHistory.length}</Text>
@@ -407,10 +497,8 @@ const formatDurationAlt = (seconds) => {
           </View>
         </View>
 
-        {/* Add Demographic Info Section */}
         {renderDemographicInfo()}
 
-        {/* Graph Section */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Nasalance over time</Text>
@@ -418,26 +506,22 @@ const formatDurationAlt = (seconds) => {
               <Ionicons name="analytics-outline" size={20} color={Colors.lightNavalBlue} />
             </TouchableOpacity>
           </View>
-          <View style={styles.graphPlaceholder}>
-            <Text style={styles.placeholderText}>Graph will be displayed here</Text>
-          </View>
+          {renderChart()}
         </View>
 
-        {/* Tests History */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Test History</Text>
             <TouchableOpacity>
               <Button
-                title="Export"
+                title={isDownloading ? "Exporting..." : "Export"}
                 icon="download-outline"
                 onPress={handleExport}
                 size="small"
+                disabled={isDownloading}
               />
-              {/* <Ionicons name="filter-outline" size={20} color={Colors.lightNavalBlue} /> */}
             </TouchableOpacity>
           </View>
-          {isDownloading && <CSVDownload data={csvData} filename={"patient_test_history.csv"} />}
 
           {loading ? (
             <LoadingIndicator text="Loading tests..." />
@@ -469,7 +553,6 @@ const formatDurationAlt = (seconds) => {
           )}
         </View>
 
-        {/* Notes Section */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Notes</Text>
@@ -576,7 +659,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 15,
   },
-  graphPlaceholder: {
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.lightNavalBlue,
+  },
+  chartContainer: {
+    alignItems: 'center',
+  },
+  chart: {
+    borderRadius: 16,
+  },
+  chartCaption: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  chartPlaceholder: {
     height: 200,
     backgroundColor: '#f8f9fa',
     borderRadius: 15,
@@ -586,6 +686,12 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: '#666',
     fontSize: 16,
+    marginTop: 10,
+  },
+  placeholderSubtext: {
+    color: '#888',
+    fontSize: 14,
+    marginTop: 5,
   },
   testCard: {
     flexDirection: 'row',

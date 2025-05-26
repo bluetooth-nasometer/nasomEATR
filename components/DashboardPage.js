@@ -38,19 +38,19 @@ const DashboardPage = ({ navigation }) => {
   const options = [
     {
       title: 'Start an Evaluation',
-      subtitle: 'Begin a new patient evaluation session',
+      subtitle: 'Begin a new patient evaluation session.',
       icon: 'clipboard-outline',
       onPress: () => navigation.navigate('HomeTab')
     },
     {
       title: 'Patient List',
-      subtitle: 'View and manage your patients',
+      subtitle: 'View and manage your patients.',
       icon: 'people-outline',
       onPress: () => navigation.navigate('HomeTab')
     },
     {
       title: 'Settings',
-      subtitle: 'Configure app preferences and profile',
+      subtitle: 'Configure app preferences and profile.',
       icon: 'settings-outline',
       onPress: () => navigation.navigate('Profile')
     }
@@ -76,13 +76,7 @@ const DashboardPage = ({ navigation }) => {
 
       {/* Footer Section */}
       <View style={styles.footer}>
-        <TouchableOpacity 
-          style={styles.helpButton}
-          onPress={() => {/* Add help functionality */}}
-        >
-          <Ionicons name="help-circle-outline" size={20} color="#666" />
-          <Text style={styles.helpText}>Need help?</Text>
-        </TouchableOpacity>
+          <Text style={styles.helpText}>If you think you have a medical emergency, call your doctor or 911 immediately.</Text>
       </View>
     </SafeAreaView>
   );
@@ -158,15 +152,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'transparent',
   },
-  helpButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-  },
   helpText: {
-    marginLeft: 8,
     color: '#666',
     fontSize: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    textAlign: 'center'
   },
 });
 

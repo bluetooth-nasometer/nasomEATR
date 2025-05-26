@@ -853,7 +853,7 @@ const TestScreen = ({ navigation, route }) => {
         <Text style={styles.sectionTitle}>Audio Input Device</Text>
         
         <Text style={styles.instructions}>
-          Please select a stereo audio device for recording.
+          Select a stereo audio device for recording.
         </Text>
         
         {selectedDevice ? (
@@ -893,7 +893,7 @@ const TestScreen = ({ navigation, route }) => {
         )}
         
         <View style={styles.deviceTips}>
-          <Text style={styles.deviceTipsTitle}>Tips for Best Results:</Text>
+          <Text style={styles.deviceTipsTitle}>For the Best Results:</Text>
           
           {/* <View style={styles.tipContainer}>
             <Ionicons name="information-circle-outline" size={18} color={Colors.lightNavalBlue} />
@@ -907,8 +907,9 @@ const TestScreen = ({ navigation, route }) => {
           
           <View style={styles.tipContainer}>
             <Ionicons name="information-circle-outline" size={18} color={Colors.lightNavalBlue} />
-            <Text style={styles.tipText}>Ensure the environment is quiet during recording</Text>
+            <Text style={styles.tipText}>Ensure the environment is quiet during recording.</Text>
           </View>
+          
         </View>
         
         <TouchableOpacity 
@@ -964,7 +965,7 @@ const TestScreen = ({ navigation, route }) => {
           </View>
           <Text style={styles.recordingTitle}>Stereo Recording</Text>
           <Text style={styles.instructions}>
-            Position both microphones (nasal and oral) and record the subject reading the provided passage
+            Position both microphones (nasal and oral) and record the subject reading a provided passage.
           </Text>
         </View>
         
@@ -1006,84 +1007,100 @@ const TestScreen = ({ navigation, route }) => {
   };
   
   const renderReview = () => {
-    return (
-      <View style={styles.reviewContainer}>
-        <Text style={styles.reviewTitle}>Review Results</Text>
-        
-        {/* Nasalance Score */}
-        <View style={styles.scoreContainer}>
-          <Text style={styles.scoreLabel}>Nasalance Score</Text>
-          <Text style={styles.scoreValue}>{Math.round(nasalanceScore)}%</Text>
-        </View>
-        
-        {/* Device info */}
-        <View style={styles.reviewDeviceInfo}>
-          <Text style={styles.reviewDeviceTitle}>Recording Device</Text>
-          <Text style={styles.reviewDeviceName}>{selectedDevice?.name || 'Unknown Device'}</Text>
-        </View>
-        
-        {/* Nasal Recording Review */}
-        <View style={styles.recordingReview}>
-          <View style={styles.recordingInfo}>
-            <Text style={styles.recordingTypeLabel}>Nasal Channel</Text>
-            <Text style={styles.recordingDuration}>Duration: {formatTime(nasalRecording?.duration || 0)}</Text>
-          </View>
-          
-          <TouchableOpacity 
-            style={styles.playButton}
-            onPress={togglePlayNasal}
-            disabled={loading}
-          >
-            <Ionicons 
-              name={isPlayingNasal ? "pause" : "play"} 
-              size={24} 
-              color="white" 
-            />
-          </TouchableOpacity>
-        </View>
-        
-        {/* Oral Recording Review */}
-        <View style={styles.recordingReview}>
-          <View style={styles.recordingInfo}>
-            <Text style={styles.recordingTypeLabel}>Oral Channel</Text>
-            <Text style={styles.recordingDuration}>Duration: {formatTime(oralRecording?.duration || 0)}</Text>
-          </View>
-          
-          <TouchableOpacity 
-            style={styles.playButton}
-            onPress={togglePlayOral}
-            disabled={loading}
-          >
-            <Ionicons 
-              name={isPlayingOral ? "pause" : "play"} 
-              size={24} 
-              color="white" 
-            />
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.navigationRow}>
-          <TouchableOpacity 
-            style={[styles.saveButton, loading && styles.disabledButton]}
-            onPress={saveTestResults}
-            disabled={loading}
-          >
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="white" />
-                <Text style={[styles.saveButtonText, { marginLeft: 8 }]}>Saving...</Text>
-              </View>
-            ) : (
-              <>
-                <Text style={styles.saveButtonText}>Save Results</Text>
-                <Ionicons name="save-outline" size={20} color="white" />
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+  // Check if MRN is available and valid
+  const isMrnValid = patient?.mrn && patient.mrn !== 'N/A' && patient.mrn.trim() !== '';
+  
+  return (
+    <View style={styles.reviewContainer}>
+      <Text style={styles.reviewTitle}>Review Results</Text>
+      
+      {/* Nasalance Score */}
+      <View style={styles.scoreContainer}>
+        <Text style={styles.scoreLabel}>Nasalance Score</Text>
+        <Text style={styles.scoreValue}>{Math.round(nasalanceScore)}%</Text>
       </View>
-    );
-  };
+      
+      {/* Device info */}
+      <View style={styles.reviewDeviceInfo}>
+        <Text style={styles.reviewDeviceTitle}>Recording Device</Text>
+        <Text style={styles.reviewDeviceName}>{selectedDevice?.name || 'Unknown Device'}</Text>
+      </View>
+      
+      {/* Show warning if MRN is missing */}
+      {!isMrnValid && (
+        <View style={styles.warningContainer}>
+          <Ionicons name="alert-circle-outline" size={20} color="#ff9800" />
+          <Text style={styles.warningText}>
+            Exit "Test Microphones" to save results.
+          </Text>
+        </View>
+      )}
+      
+      {/* Nasal Recording Review */}
+      <View style={styles.recordingReview}>
+        <View style={styles.recordingInfo}>
+          <Text style={styles.recordingTypeLabel}>Nasal Channel</Text>
+          <Text style={styles.recordingDuration}>Duration: {formatTime(nasalRecording?.duration || 0)}</Text>
+        </View>
+        
+        <TouchableOpacity 
+          style={styles.playButton}
+          onPress={togglePlayNasal}
+          disabled={loading}
+        >
+          <Ionicons 
+            name={isPlayingNasal ? "pause" : "play"} 
+            size={24} 
+            color="white" 
+          />
+        </TouchableOpacity>
+      </View>
+      
+      {/* Oral Recording Review */}
+      <View style={styles.recordingReview}>
+        <View style={styles.recordingInfo}>
+          <Text style={styles.recordingTypeLabel}>Oral Channel</Text>
+          <Text style={styles.recordingDuration}>Duration: {formatTime(oralRecording?.duration || 0)}</Text>
+        </View>
+        
+        <TouchableOpacity 
+          style={styles.playButton}
+          onPress={togglePlayOral}
+          disabled={loading}
+        >
+          <Ionicons 
+            name={isPlayingOral ? "pause" : "play"} 
+            size={24} 
+            color="white" 
+          />
+        </TouchableOpacity>
+      </View>
+      
+      <View style={styles.navigationRow}>
+        <TouchableOpacity 
+          style={[
+            styles.saveButton, 
+            (loading || !isMrnValid) && styles.disabledButton
+          ]}
+          onPress={saveTestResults}
+          disabled={loading || !isMrnValid}
+        >
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color="white" />
+              <Text style={[styles.saveButtonText, { marginLeft: 8 }]}>Saving...</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.saveButtonText}>Save Results</Text>
+              <Ionicons name="save-outline" size={20} color="white" />
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
   
   const renderCurrentStep = () => {
     switch(currentStep) {
@@ -1683,5 +1700,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  warningContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff3cd',
+    borderLeftWidth: 4,
+    borderLeftColor: '#ff9800',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  warningText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#856404',
+    flex: 1,
   },
 });

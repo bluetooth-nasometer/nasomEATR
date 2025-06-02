@@ -33,7 +33,7 @@ const TestDetailScreen = ({ route, navigation }) => {
       try {
         setParsedData(JSON.parse(test.nasalance_data));
       } catch (error) {
-        console.error("Failed to parse nasalance_data:", error);
+        console.error("(TestDetailScreen - useEffect)Failed to parse nasalance_data:", error);
       }
     }
     
@@ -60,11 +60,46 @@ const TestDetailScreen = ({ route, navigation }) => {
     });
   };
 
-  const formatDuration = (seconds) => {
-    if (!seconds) return '0:00';
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
+//  const formatDuration = (seconds) => {
+//    if (!seconds) return '0:00';
+//    const minutes = Math.floor(seconds / 60);
+//    const remainingSeconds = seconds % 60;
+//    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+//  };
+  const formatDurationAlt = (seconds) =>{
+    if (!seconds || seconds === 0 || isNaN(seconds)) {
+      return 'N/A';
+    }
+
+    // under 60 seconds, show seconds with 1 decimal
+    if (seconds < 60) {
+        return `${seconds.toFixed(1)}s`;
+    }
+
+    //  convert to minutes:seconds for longer durations
+    const totalSeconds = Math.round(seconds);
+    const minutes = Math.floor(totalSeconds / 60);
+    const remainingSeconds = totalSeconds % 60;
+
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  }
+
+  const getDuration = (test) => {
+    // Handle if nasalance_data is already an object
+    if (test.nasalance_data && typeof test.nasalance_data === 'object') {
+      return test.nasalance_data.duration || 0;
+    }
+
+    // Handle if nasalance_data is a JSON string that needs parsing
+    if (test.nasalance_data && typeof test.nasalance_data === 'string') {
+      try {
+        const parsed = JSON.parse(test.nasalance_data);
+        return parsed.duration || 0;
+      } catch (e) {
+        console.warn('(Test Detail Screen - getDuration) Failed to parse nasalance_data:', e);
+        return 0;
+      }
+    }
   };
 
   // Play nasal recording with improved error handling
@@ -233,7 +268,7 @@ const TestDetailScreen = ({ route, navigation }) => {
             <View style={styles.recordingInfo}>
               <Text style={styles.recordingTitle}>Nasal Recording</Text>
               <Text style={styles.recordingSubtitle}>
-                Duration: {formatDuration(parsedData?.duration / 2 || 0)}
+                Duration: {formatDurationAlt(getDuration(test))}
               </Text>
             </View>
             <TouchableOpacity 
@@ -258,7 +293,7 @@ const TestDetailScreen = ({ route, navigation }) => {
             <View style={styles.recordingInfo}>
               <Text style={styles.recordingTitle}>Oral Recording</Text>
               <Text style={styles.recordingSubtitle}>
-                Duration: {formatDuration(parsedData?.duration / 2 || 0)}
+                Duration: {formatDurationAlt(getDuration(test))}
               </Text>
             </View>
             <TouchableOpacity 
@@ -293,7 +328,7 @@ const TestDetailScreen = ({ route, navigation }) => {
         </View>
 
         {/* Placeholder for future features */}
-        <View style={styles.placeholderCard}>
+        {/* <View style={styles.placeholderCard}>
           <View style={styles.placeholderHeader}>
             <Text style={styles.sectionTitle}>Nasalance Graph</Text>
           </View>
@@ -303,7 +338,7 @@ const TestDetailScreen = ({ route, navigation }) => {
               Detailed analysis will be available in future updates
             </Text>
           </View>
-        </View>
+        </View> */}
       </ScrollView>
     </View>
   );

@@ -103,6 +103,7 @@ Otherwise, you can calculate the sound pressure level through this [equation](ht
 $$
 \text{nasalance (\%)} = \frac{\text{nasal SPL}}{\text{nasal SPL} + \text{oral SPL}} \times 100
 $$
+
 over the course of the audio file / recorded period for our pediatric patient that easily with just 2 mics.
 
 

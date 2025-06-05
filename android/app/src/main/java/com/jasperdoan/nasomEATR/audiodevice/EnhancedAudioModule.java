@@ -34,6 +34,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.BufferedOutputStream;
 import java.io.DataOutputStream;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
@@ -1139,6 +1140,298 @@ public class EnhancedAudioModule extends ReactContextBaseJavaModule {
                 }
             }
         });
+    }
+
+    /**
+     * Enhanced audio quality analysis method
+     */
+    @ReactMethod
+    public void analyzeAudioQuality(String audioFilePath, final Promise promise) {
+        audioProcessingExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String normalizedPath = normalizeFilePath(audioFilePath);
+                    Log.d(TAG, "Analyzing audio quality for: " + normalizedPath);
+                    
+                    // First calculate basic RMS
+                    calculateRmsInternal(normalizedPath, new RmsCallback() {
+                        @Override
+                        public void onRmsCalculated(double rms) {
+                            // Perform additional quality analysis
+                            performQualityAnalysis(normalizedPath, rms, promise);
+                        }
+                        
+                        @Override
+                        public void onError(String error) {
+                            reactContext.runOnUiQueueThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    promise.reject(E_PROCESSING_ERROR, error);
+                                }
+                            });
+                        }
+                    });
+                    
+                } catch (Exception e) {
+                    Log.e(TAG, "Error in audio quality analysis", e);
+                    reactContext.runOnUiQueueThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            promise.reject(E_PROCESSING_ERROR, "Failed to analyze audio quality: " + e.getMessage());
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    private interface RmsCallback {
+        void onRmsCalculated(double rms);
+        void onError(String error);
+    }
+
+    private void calculateRmsInternal(String audioFilePath, RmsCallback callback) {
+        FileInputStream fis = null;
+        
+        try {
+            File audioFile = new File(audioFilePath);
+            if (!audioFile.exists()) {
+                callback.onError("Audio file does not exist: " + audioFilePath);
+                return;
+            }
+            
+            if (audioFile.length() == 0) {
+                callback.onError("Audio file is empty: " + audioFilePath);
+                return;
+            }
+            
+            // Parse WAV file
+            fis = new FileInputStream(audioFile);
+            
+            // Skip WAV header to get to PCM data
+            byte[] headerBuffer = new byte[44];
+            fis.read(headerBuffer);
+            
+            // Verify it's a WAV file
+            if (!new String(headerBuffer, 0, 4).equals("RIFF") || 
+                !new String(headerBuffer, 8, 4).equals("WAVE")) {
+                callback.onError("Not a valid WAV file: " + audioFilePath);
+                return;
+            }
+            
+            // Parse format chunk
+            int channels = headerBuffer[22] & 0xFF | (headerBuffer[23] & 0xFF) << 8;
+            int bitsPerSample = headerBuffer[34] & 0xFF | (headerBuffer[35] & 0xFF) << 8;
+            
+            // Find data chunk
+            fis.close();
+            fis = new FileInputStream(audioFile);
+            fis.skip(12); // Skip "RIFF", size, and "WAVE"
+            
+            boolean foundDataChunk = false;
+            byte[] chunkHeader = new byte[8];
+            
+            while (!foundDataChunk) {
+                if (fis.read(chunkHeader) < 8) {
+                    callback.onError("Invalid WAV file format - no data chunk found");
+                    return;
+                }
+                
+                String id = new String(chunkHeader, 0, 4);
+                int size = chunkHeader[4] & 0xFF | 
+                        (chunkHeader[5] & 0xFF) << 8 | 
+                        (chunkHeader[6] & 0xFF) << 16 | 
+                        (chunkHeader[7] & 0xFF) << 24;
+                
+                if (id.equals("data")) {
+                    foundDataChunk = true;
+                } else {
+                    fis.skip(size);
+                }
+            }
+            
+            // Calculate RMS for 16-bit audio
+            if (bitsPerSample == 16) {
+                double sumSquares = 0;
+                int samplesProcessed = 0;
+                int bytesPerSample = bitsPerSample / 8;
+                
+                byte[] buffer = new byte[1024 * bytesPerSample];
+                int bytesRead;
+                
+                while ((bytesRead = fis.read(buffer)) > 0) {
+                    int samplesInBuffer = bytesRead / bytesPerSample;
+                    
+                    for (int i = 0; i < samplesInBuffer; i++) {
+                        int sampleOffset = i * bytesPerSample;
+                        
+                        short sample = (short) ((buffer[sampleOffset + 1] & 0xff) << 8 | 
+                                            (buffer[sampleOffset] & 0xff));
+                        
+                        sumSquares += sample * sample;
+                        samplesProcessed++;
+                    }
+                }
+                
+                if (samplesProcessed == 0) {
+                    callback.onError("No valid samples found for RMS calculation");
+                    return;
+                }
+                
+                double rms = Math.sqrt(sumSquares / samplesProcessed);
+                double normalizedRms = rms / 32768.0;
+                
+                callback.onRmsCalculated(normalizedRms);
+            } else {
+                callback.onError("Unsupported bit depth: " + bitsPerSample);
+            }
+            
+        } catch (Exception e) {
+            callback.onError("Failed to calculate RMS: " + e.getMessage());
+        } finally {
+            try {
+                if (fis != null) fis.close();
+            } catch (IOException e) {
+                Log.e(TAG, "Error closing file stream", e);
+            }
+        }
+    }
+
+    private void performQualityAnalysis(String audioFilePath, double rms, Promise promise) {
+        FileInputStream fis = null;
+        
+        try {
+            File audioFile = new File(audioFilePath);
+            fis = new FileInputStream(audioFile);
+            
+            // Parse WAV header for additional metrics
+            byte[] headerBuffer = new byte[44];
+            fis.read(headerBuffer);
+            
+            int channels = headerBuffer[22] & 0xFF | (headerBuffer[23] & 0xFF) << 8;
+            int sampleRate = headerBuffer[24] & 0xFF | 
+                           (headerBuffer[25] & 0xFF) << 8 | 
+                           (headerBuffer[26] & 0xFF) << 16 | 
+                           (headerBuffer[27] & 0xFF) << 24;
+            int bitsPerSample = headerBuffer[34] & 0xFF | (headerBuffer[35] & 0xFF) << 8;
+            
+            // Find data chunk
+            fis.close();
+            fis = new FileInputStream(audioFile);
+            fis.skip(12);
+            
+            boolean foundDataChunk = false;
+            byte[] chunkHeader = new byte[8];
+            int dataSize = 0;
+            
+            while (!foundDataChunk) {
+                if (fis.read(chunkHeader) < 8) break;
+                
+                String id = new String(chunkHeader, 0, 4);
+                int size = chunkHeader[4] & 0xFF | 
+                        (chunkHeader[5] & 0xFF) << 8 | 
+                        (chunkHeader[6] & 0xFF) << 16 | 
+                        (chunkHeader[7] & 0xFF) << 24;
+                
+                if (id.equals("data")) {
+                    foundDataChunk = true;
+                    dataSize = size;
+                } else {
+                    fis.skip(size);
+                }
+            }
+            
+            // Analyze amplitude characteristics
+            double maxAmplitude = 0.0;
+            double minAmplitude = 0.0;
+            boolean hasClipping = false;
+            long totalSamples = 0;
+            
+            if (bitsPerSample == 16) {
+                int bytesPerSample = 2;
+                byte[] buffer = new byte[1024 * bytesPerSample];
+                int bytesRead;
+                
+                while ((bytesRead = fis.read(buffer)) > 0) {
+                    int samplesInBuffer = bytesRead / bytesPerSample;
+                    
+                    for (int i = 0; i < samplesInBuffer; i++) {
+                        int sampleOffset = i * bytesPerSample;
+                        
+                        short sample = (short) ((buffer[sampleOffset + 1] & 0xff) << 8 | 
+                                            (buffer[sampleOffset] & 0xff));
+                        
+                        double normalizedSample = sample / 32768.0;
+                        double absSample = Math.abs(normalizedSample);
+                        
+                        if (absSample > maxAmplitude) {
+                            maxAmplitude = absSample;
+                        }
+                        
+                        if (normalizedSample < minAmplitude) {
+                            minAmplitude = normalizedSample;
+                        }
+                        
+                        // Check for clipping (close to maximum value)
+                        if (absSample >= 0.95) {
+                            hasClipping = true;
+                        }
+                        
+                        totalSamples++;
+                    }
+                }
+            }
+            
+            // Calculate derived metrics
+            double dynamicRange = maxAmplitude - minAmplitude;
+            
+            // Estimate SNR (simplified calculation)
+            double signalPower = rms * rms;
+            double estimatedNoisePower = signalPower * 0.01; // Assume 1% noise
+            double snr = signalPower > 0 ? 10 * Math.log10(signalPower / estimatedNoisePower) : 0;
+            
+            // Calculate duration
+            double durationSeconds = (double) totalSamples / sampleRate / channels;
+            
+            // Create result map
+            final WritableMap analysis = Arguments.createMap();
+            analysis.putDouble("rms", rms);
+            analysis.putDouble("peakAmplitude", maxAmplitude);
+            analysis.putDouble("dynamicRange", dynamicRange);
+            analysis.putBoolean("clipping", hasClipping);
+            analysis.putDouble("snr", snr);
+            analysis.putInt("sampleRate", sampleRate);
+            analysis.putInt("channels", channels);
+            analysis.putInt("bitsPerSample", bitsPerSample);
+            analysis.putDouble("duration", durationSeconds);
+            analysis.putInt("totalSamples", (int) totalSamples);
+            
+            Log.d(TAG, "Audio quality analysis completed - RMS: " + rms + 
+                      ", Peak: " + maxAmplitude + ", SNR: " + snr + " dB");
+            
+            reactContext.runOnUiQueueThread(new Runnable() {
+                @Override
+                public void run() {
+                    promise.resolve(analysis);
+                }
+            });
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Error in quality analysis", e);
+            reactContext.runOnUiQueueThread(new Runnable() {
+                @Override
+                public void run() {
+                    promise.reject(E_PROCESSING_ERROR, "Failed to perform quality analysis: " + e.getMessage());
+                }
+            });
+        } finally {
+            try {
+                if (fis != null) fis.close();
+            } catch (IOException e) {
+                Log.e(TAG, "Error closing file stream", e);
+            }
+        }
     }
     
     /**

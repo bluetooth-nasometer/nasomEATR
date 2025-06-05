@@ -1120,7 +1120,7 @@ const TestScreen = ({ navigation, route }) => {
   return (
     <SafeAreaView style={styles.container}>
       <HeaderBar 
-        title="Nasalance Test"
+        title="Nasalance Evaluation"
         onBack={handleBackPress}
       />
       
